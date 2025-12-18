@@ -48,6 +48,16 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
   const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
   const [hoveredAge, setHoveredAge] = useState<number | null>(null);
 
+  // FIX: Added missing clearFilters function to reset all dashboard filters
+  const clearFilters = () => {
+    setPeriodFilter('Todo o Período');
+    setYearFilter('-- Por Ano --');
+    setMonthFilter('-- Por Mês --');
+    setFortnightFilter('-- Por Quinzena --');
+    setAviaryFilter('Todos Aviários');
+    setBatchFilter('-- Todos Lotes --');
+  };
+
   // Opções Dinâmicas de Filtro
   const yearOptions = useMemo(() => {
     const years = (Array.from(new Set(records.map(r => r.date.split('-')[0]))) as string[])
@@ -150,6 +160,26 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     };
   }, [filteredRecords]);
 
+  // FIX: Added missing qualitySegments logic for egg quality donut chart
+  const qualitySegments = useMemo(() => {
+    if (!stats) return [];
+    const { clean, dirty, cracked, floor, total } = stats.quality;
+    const items = [
+      { color: '#10b981', value: clean },
+      { color: '#f97316', value: dirty },
+      { color: '#ef4444', value: cracked },
+      { color: '#a855f7', value: floor },
+    ];
+    let currentOffset = 0;
+    const circumference = 251.32;
+    return items.map(item => {
+      const dash = (item.value / (total || 1)) * circumference;
+      const offset = currentOffset;
+      currentOffset -= dash;
+      return { ...item, dash, offset };
+    });
+  }, [stats]);
+
   // Dados Curva de Maturidade (Postura x Idade)
   const maturityData = useMemo(() => {
     const batchesMap: Record<string, Record<number, { sum: number, count: number }>> = {};
@@ -202,7 +232,6 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
 
     if (maturityData.length === 0) return <div className="h-full flex items-center justify-center text-gray-400 italic py-20">Sem dados de lote para cruzamento de idade</div>;
 
-    // Escala fixa: 0 a 80 semanas
     const minAge = 0;
     const maxAge = 80;
     const ageRange = maxAge - minAge;
@@ -210,139 +239,117 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     const getX = (age: number) => paddingLeft + ((age - minAge) / ageRange) * chartW;
     const getY = (rate: number) => height - paddingBottom - (rate / 100) * chartH;
 
-    // Cores baseadas na imagem (Azul escuro e Laranja/Amarelo)
     const lineColors = ['#000080', '#FF8C00', '#10b981', '#a855f7'];
 
     return (
-      <div className="relative w-full h-full flex flex-col">
-        {/* Cabeçalho Compacto com Padronização Visual */}
-        <div className="flex items-center gap-3 mb-2">
-           <div className="w-2 h-5 bg-blue-600 rounded-full"></div>
-           <h3 className="text-sm font-black text-gray-700 uppercase tracking-tight">Curva de Maturidade do Lote (Postura x Idade)</h3>
-        </div>
+      <div className="relative w-full h-full flex flex-col overflow-x-auto scrollbar-hide">
+        <div className="min-w-[800px]">
+          <div className="flex items-center gap-3 mb-2">
+             <div className="w-2 h-5 bg-blue-600 rounded-full"></div>
+             <h3 className="text-sm font-black text-gray-700 uppercase tracking-tight">Curva de Maturidade do Lote (Postura x Idade)</h3>
+          </div>
 
-        {/* Legenda Moderna Compacta */}
-        <div className="flex justify-center gap-8 mb-4">
-           {maturityData.map((b, i) => (
-             <div key={b.batchId} className="flex items-center gap-2">
-                <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: lineColors[i % lineColors.length] }}></div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Lote: {b.batchId}</span>
-             </div>
-           ))}
-        </div>
+          <div className="flex justify-center gap-8 mb-4">
+             {maturityData.map((b, i) => (
+               <div key={b.batchId} className="flex items-center gap-2">
+                  <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: lineColors[i % lineColors.length] }}></div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Lote: {b.batchId}</span>
+               </div>
+             ))}
+          </div>
 
-        <div className="flex-1 relative">
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
-            {/* Grade Vertical Semanal (Subtil) */}
-            {Array.from({ length: 81 }, (_, i) => i).map(age => (
-              <line 
-                key={`v-week-${age}`}
-                x1={getX(age)} y1={paddingTop} x2={getX(age)} y2={getY(0)} 
-                stroke="#f1f5f9" strokeWidth={age % 10 === 0 ? "1" : "0.5"} 
-              />
-            ))}
-
-            {/* Grid Horizontal */}
-            {[0, 25, 50, 75, 100].map(v => (
-              <g key={v}>
-                <line x1={paddingLeft} y1={getY(v)} x2={width - paddingRight} y2={getY(v)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
-                <text x={paddingLeft - 15} y={getY(v) + 4} textAnchor="end" className="text-[11px] fill-gray-400 font-black">{v}</text>
-              </g>
-            ))}
-
-            {/* Eixos Estilo L (Científico) */}
-            <line x1={paddingLeft} y1={getY(0)} x2={width - paddingRight} y2={getY(0)} stroke="#1f2937" strokeWidth="1.5" />
-            <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={getY(0)} stroke="#1f2937" strokeWidth="1.5" />
-
-            {/* Títulos dos Eixos - Estilo imagem */}
-            <text x={20} y={height / 2} transform={`rotate(-90, 20, ${height / 2})`} textAnchor="middle" className="text-[11px] font-black fill-gray-800 tracking-tight">Postura (%/semana)</text>
-            <text x={width / 2} y={height - 15} textAnchor="middle" className="text-[11px] font-black fill-gray-800 tracking-tight">Idade em semanas</text>
-
-            {/* Linhas Bezier Suaves */}
-            {maturityData.map((batch, idx) => {
-              if (batch.points.length < 2) return null;
-              
-              let d = `M ${getX(batch.points[0].age)},${getY(batch.points[0].rate)}`;
-              for (let i = 0; i < batch.points.length - 1; i++) {
-                const curr = batch.points[i];
-                const next = batch.points[i+1];
-                const cx = (getX(curr.age) + getX(next.age)) / 2;
-                d += ` C ${cx},${getY(curr.rate)} ${cx},${getY(next.rate)} ${getX(next.age)},${getY(next.rate)}`;
-              }
-
-              return (
-                <path 
-                  key={batch.batchId}
-                  d={d} fill="none" 
-                  stroke={lineColors[idx % lineColors.length]} 
-                  strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" 
-                  className="opacity-100 transition-all duration-300"
+          <div className="relative">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+              {Array.from({ length: 81 }, (_, i) => i).map(age => (
+                <line 
+                  key={`v-week-${age}`}
+                  x1={getX(age)} y1={paddingTop} x2={getX(age)} y2={getY(0)} 
+                  stroke="#f1f5f9" strokeWidth={age % 10 === 0 ? "1" : "0.5"} 
                 />
-              );
-            })}
+              ))}
 
-            {/* Pontos Individuais (Opcional, pequenos para visual limpo) */}
-            {maturityData.map((batch, idx) => (
-              <g key={`pts-${batch.batchId}`}>
-                {batch.points.map((p, pIdx) => (
-                  <circle 
-                    key={`${batch.batchId}-${pIdx}`}
-                    cx={getX(p.age)} cy={getY(p.rate)} r="2"
-                    fill={lineColors[idx % lineColors.length]}
+              {[0, 25, 50, 75, 100].map(v => (
+                <g key={v}>
+                  <line x1={paddingLeft} y1={getY(v)} x2={width - paddingRight} y2={getY(v)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
+                  <text x={paddingLeft - 15} y={getY(v) + 4} textAnchor="end" className="text-[11px] fill-gray-400 font-black">{v}</text>
+                </g>
+              ))}
+
+              <line x1={paddingLeft} y1={getY(0)} x2={width - paddingRight} y2={getY(0)} stroke="#1f2937" strokeWidth="1.5" />
+              <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={getY(0)} stroke="#1f2937" strokeWidth="1.5" />
+
+              <text x={20} y={height / 2} transform={`rotate(-90, 20, ${height / 2})`} textAnchor="middle" className="text-[11px] font-black fill-gray-800 tracking-tight">Postura (%)</text>
+              <text x={width / 2} y={height - 15} textAnchor="middle" className="text-[11px] font-black fill-gray-800 tracking-tight">Idade em semanas</text>
+
+              {maturityData.map((batch, idx) => {
+                if (batch.points.length < 2) return null;
+                
+                let d = `M ${getX(batch.points[0].age)},${getY(batch.points[0].rate)}`;
+                for (let i = 0; i < batch.points.length - 1; i++) {
+                  const curr = batch.points[i];
+                  const next = batch.points[i+1];
+                  const cx = (getX(curr.age) + getX(next.age)) / 2;
+                  d += ` C ${cx},${getY(curr.rate)} ${cx},${getY(next.rate)} ${getX(next.age)},${getY(next.rate)}`;
+                }
+
+                return (
+                  <path 
+                    key={batch.batchId}
+                    d={d} fill="none" 
+                    stroke={lineColors[idx % lineColors.length]} 
+                    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" 
+                    className="opacity-100 transition-all duration-300"
                   />
-                ))}
-              </g>
-            ))}
+                );
+              })}
 
-            {/* Rótulos Eixo X (Semanas) */}
-            {[0, 20, 40, 60, 80].map(age => (
-              <g key={age}>
-                 <line x1={getX(age)} y1={getY(0)} x2={getX(age)} y2={getY(0) + 8} stroke="#1f2937" strokeWidth="1.5" />
-                 <text x={getX(age)} y={getY(0) + 25} textAnchor="middle" className="text-[12px] fill-gray-800 font-black">{age}</text>
-              </g>
-            ))}
+              {[0, 20, 40, 60, 80].map(age => (
+                <g key={age}>
+                   <line x1={getX(age)} y1={getY(0)} x2={getX(age)} y2={getY(0) + 8} stroke="#1f2937" strokeWidth="1.5" />
+                   <text x={getX(age)} y={getY(0) + 25} textAnchor="middle" className="text-[12px] fill-gray-800 font-black">{age}</text>
+                </g>
+              ))}
 
-            {/* Hit Zones e Guia Vertical */}
-            {allMaturityAges.map((age) => (
-               <rect 
-                 key={age}
-                 x={getX(age) - 10} y={0} width="20" height={height}
-                 fill="transparent" className="cursor-pointer"
-                 onMouseEnter={() => setHoveredAge(age)}
-                 onMouseLeave={() => setHoveredAge(null)}
-               />
-            ))}
+              {allMaturityAges.map((age) => (
+                 <rect 
+                   key={age}
+                   x={getX(age) - 10} y={0} width="20" height={height}
+                   fill="transparent" className="cursor-pointer"
+                   onMouseEnter={() => setHoveredAge(age)}
+                   onMouseLeave={() => setHoveredAge(null)}
+                 />
+              ))}
+              {hoveredAge !== null && (
+                <line x1={getX(hoveredAge)} y1={paddingTop} x2={getX(hoveredAge)} y2={getY(0)} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" />
+              )}
+            </svg>
+
             {hoveredAge !== null && (
-              <line x1={getX(hoveredAge)} y1={paddingTop} x2={getX(hoveredAge)} y2={getY(0)} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" />
-            )}
-          </svg>
-
-          {/* Tooltip Científico Flutuante */}
-          {hoveredAge !== null && (
-            <div 
-              className="absolute bg-white border border-gray-200 p-2.5 rounded shadow-lg z-50 pointer-events-none transition-all duration-75 min-w-[120px]"
-              style={{ 
-                top: '20px', 
-                left: (getX(hoveredAge) / width) > 0.7 ? 'auto' : `${(getX(hoveredAge) / width) * 100}%`,
-                right: (getX(hoveredAge) / width) > 0.7 ? '5%' : 'auto',
-                transform: (getX(hoveredAge) / width) > 0.7 ? 'none' : 'translateX(15px)'
-              }}
-            >
-              <div className="text-[10px] font-black text-gray-400 mb-1 border-b pb-1 uppercase">{hoveredAge} Semanas</div>
-              <div className="space-y-1">
-                 {maturityData.map((batch, idx) => {
-                   const p = batch.points.find(pt => pt.age === hoveredAge);
-                   if (!p) return null;
-                   return (
-                     <div key={batch.batchId} className="flex items-center justify-between text-[11px] font-bold">
-                        <span style={{ color: lineColors[idx % lineColors.length] }}>Lote {batch.batchId}</span>
-                        <span className="text-gray-900">{p.rate.toFixed(1)}%</span>
-                     </div>
-                   );
-                 })}
+              <div 
+                className="absolute bg-white border border-gray-200 p-2.5 rounded shadow-lg z-50 pointer-events-none transition-all duration-75 min-w-[120px]"
+                style={{ 
+                  top: '20px', 
+                  left: (getX(hoveredAge) / width) > 0.7 ? 'auto' : `${(getX(hoveredAge) / width) * 100}%`,
+                  right: (getX(hoveredAge) / width) > 0.7 ? '5%' : 'auto',
+                  transform: (getX(hoveredAge) / width) > 0.7 ? 'none' : 'translateX(15px)'
+                }}
+              >
+                <div className="text-[10px] font-black text-gray-400 mb-1 border-b pb-1 uppercase">{hoveredAge} Semanas</div>
+                <div className="space-y-1">
+                   {maturityData.map((batch, idx) => {
+                     const p = batch.points.find(pt => pt.age === hoveredAge);
+                     if (!p) return null;
+                     return (
+                       <div key={batch.batchId} className="flex items-center justify-between text-[11px] font-bold">
+                          <span style={{ color: lineColors[idx % lineColors.length] }}>Lote {batch.batchId}</span>
+                          <span className="text-gray-900">{p.rate.toFixed(1)}%</span>
+                       </div>
+                     );
+                   })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     );
@@ -394,132 +401,90 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     }
 
     return (
-      <div className="relative w-full h-full group">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
-          {[0, 0.25, 0.5, 0.75, 1].map(p => {
-            const yPos = height - paddingBottom - (p * (height - paddingBottom - paddingTop));
-            const labelValue = Math.round(p * yAxisMax);
-            return (
-              <g key={p}>
-                <line x1={paddingLeft} y1={yPos} x2={width - paddingRight} y2={yPos} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
-                <text x={paddingLeft - 10} y={yPos + 3} textAnchor="end" className="text-[9px] fill-gray-400 font-bold">{labelValue >= 1000 ? `${(labelValue / 1000).toFixed(1)}k` : labelValue}</text>
-              </g>
-            );
-          })}
-          <text x={15} y={height / 2} transform={`rotate(-90, 15, ${height / 2})`} textAnchor="middle" className="text-[8px] font-black fill-gray-300 uppercase tracking-widest">Quantidade Ovos</text>
-          {MONTHS_SHORT.map((m, i) => (
-            <text key={m} x={getX(i)} y={height - 20} textAnchor="middle" className="text-[10px] fill-gray-400 font-bold uppercase">{m}</text>
-          ))}
-          <path d={d} fill="none" stroke={lineColor} strokeWidth="4" strokeLinecap="round" className="transition-all duration-500 ease-in-out drop-shadow-sm" />
-          {hoveredMonthIdx !== null && (
-            <line x1={getX(hoveredMonthIdx)} y1={paddingTop} x2={getX(hoveredMonthIdx)} y2={height - paddingBottom} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
-          )}
-          {hoveredMonthIdx !== null && (
-            <circle cx={getX(hoveredMonthIdx)} cy={getY(isSingleAviary ? (lineChartData[hoveredMonthIdx] as Record<string, number>)[activeId] : (lineChartData[hoveredMonthIdx] as Record<string, number>)['total'])} r="6" fill="white" stroke={lineColor} strokeWidth="4" />
-          )}
-          {MONTHS_SHORT.map((_, i) => (
-            <rect key={i} x={getX(i) - 20} y={0} width="40" height={height} fill="transparent" className="cursor-pointer" onMouseEnter={() => setHoveredMonthIdx(i)} onMouseLeave={() => setHoveredMonthIdx(null)} />
-          ))}
-        </svg>
-
-        {hoveredMonthIdx !== null && (
-          <div 
-            className="absolute bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-xl border border-gray-100 z-50 pointer-events-none transition-all duration-100 min-w-[160px]"
-            style={{ 
-              top: '10px', 
-              left: (getX(hoveredMonthIdx) / width) > 0.7 ? 'auto' : `${(getX(hoveredMonthIdx) / width) * 100}%`,
-              right: (getX(hoveredMonthIdx) / width) > 0.7 ? '5%' : 'auto',
-              transform: (getX(hoveredMonthIdx) / width) > 0.7 ? 'none' : 'translateX(10px)'
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2 pb-1 border-b border-gray-50">
-               <Calendar size={12} className="text-blue-500" />
-               <span className="text-[10px] font-black text-gray-700 uppercase">{MONTHS[hoveredMonthIdx]}</span>
-            </div>
-            <div className="space-y-1.5">
-               <div className="flex items-center justify-between text-[10px] font-bold">
-                  <div className="flex items-center gap-1.5">
-                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: lineColor }}></div>
-                     <span className="text-gray-500">{isSingleAviary ? `Aviário ${activeId}` : 'Total Produção'}</span>
-                  </div>
-                  <span className="text-gray-800">
-                    {(isSingleAviary ? (lineChartData[hoveredMonthIdx] as Record<string, number>)[activeId] : (lineChartData[hoveredMonthIdx] as Record<string, number>)['total']).toLocaleString('pt-BR')}
-                  </span>
-               </div>
-            </div>
-          </div>
-        )}
+      <div className="relative w-full h-full group overflow-x-auto scrollbar-hide">
+        <div className="min-w-[600px]">
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+            {[0, 0.25, 0.5, 0.75, 1].map(p => {
+              const yPos = height - paddingBottom - (p * (height - paddingBottom - paddingTop));
+              const labelValue = Math.round(p * yAxisMax);
+              return (
+                <g key={p}>
+                  <line x1={paddingLeft} y1={yPos} x2={width - paddingRight} y2={yPos} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
+                  <text x={paddingLeft - 10} y={yPos + 3} textAnchor="end" className="text-[9px] fill-gray-400 font-bold">{labelValue >= 1000 ? `${(labelValue / 1000).toFixed(1)}k` : labelValue}</text>
+                </g>
+              );
+            })}
+            {MONTHS_SHORT.map((m, i) => (
+              <text key={m} x={getX(i)} y={height - 20} textAnchor="middle" className="text-[10px] fill-gray-400 font-bold uppercase">{m}</text>
+            ))}
+            <path d={d} fill="none" stroke={lineColor} strokeWidth="4" strokeLinecap="round" className="transition-all duration-500 ease-in-out drop-shadow-sm" />
+            {hoveredMonthIdx !== null && (
+              <line x1={getX(hoveredMonthIdx)} y1={paddingTop} x2={getX(hoveredMonthIdx)} y2={height - paddingBottom} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
+            )}
+            {hoveredMonthIdx !== null && (
+              <circle cx={getX(hoveredMonthIdx)} cy={getY(isSingleAviary ? (lineChartData[hoveredMonthIdx] as Record<string, number>)[activeId] : (lineChartData[hoveredMonthIdx] as Record<string, number>)['total'])} r="6" fill="white" stroke={lineColor} strokeWidth="4" />
+            )}
+            {MONTHS_SHORT.map((_, i) => (
+              <rect key={i} x={getX(i) - 20} y={0} width="40" height={height} fill="transparent" className="cursor-pointer" onMouseEnter={() => setHoveredMonthIdx(i)} onMouseLeave={() => setHoveredMonthIdx(null)} />
+            ))}
+          </svg>
+        </div>
       </div>
     );
   };
 
-  const qualitySegments = useMemo(() => {
-    if (!stats) return [];
-    const total = stats.quality.total || 1;
-    const circumference = 251.32; let currentOffset = 0;
-    return [
-      { label: 'Limpos', value: stats.quality.clean, color: '#10b981' },
-      { label: 'Sujos', value: stats.quality.dirty, color: '#f59e0b' },
-      { label: 'Trincados', value: stats.quality.cracked, color: '#ef4444' },
-      { label: 'Cama', value: stats.quality.floor, color: '#a855f7' }
-    ].map(seg => {
-      const percentage = seg.value / total; const dash = percentage * circumference; const offset = currentOffset; currentOffset -= dash; 
-      return { ...seg, dash, offset, percentage: percentage * 100 };
-    });
-  }, [stats]);
-
-  const clearFilters = () => {
-    setPeriodFilter('Todo o Período'); setYearFilter('-- Por Ano --'); setMonthFilter('-- Por Mês --'); setFortnightFilter('-- Por Quinzena --'); setAviaryFilter('Todos Aviários'); setBatchFilter('-- Todos Lotes --');
-  };
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
+      {/* Filtros Mobile-Friendly */}
       <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
         <div className="flex items-center gap-2 mb-4 text-gray-400 text-[10px] font-black uppercase tracking-widest">
            <Filter size={14} /> Filtros de Pesquisa
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-3">
           <FilterSelect value={periodFilter} onChange={setPeriodFilter} options={['Todo o Período', 'Últimos 7 dias', 'Últimos 30 dias', 'Mês Atual']} />
           <FilterSelect value={yearFilter} onChange={setYearFilter} options={yearOptions} />
           <FilterSelect value={monthFilter} onChange={setMonthFilter} options={['-- Por Mês --', ...MONTHS]} />
           <FilterSelect value={fortnightFilter} onChange={setFortnightFilter} options={['-- Por Quinzena --', ...fortnightOptions.map(o => o.value)]} customLabels={fortnightOptions} />
           <FilterSelect value={aviaryFilter} onChange={setAviaryFilter} options={['Todos Aviários', 'Aviário 1', 'Aviário 2', 'Aviário 3', 'Aviário 4']} />
           <FilterSelect value={batchFilter} onChange={setBatchFilter} options={batchOptions} />
-          <button onClick={clearFilters} className="ml-auto text-[10px] font-black text-blue-600 uppercase hover:underline">Limpar Filtros</button>
+          <button onClick={clearFilters} className="sm:ml-auto text-[10px] font-black text-blue-600 uppercase hover:underline py-2">Limpar Filtros</button>
         </div>
       </div>
 
       {!stats ? (
-        <div className="p-20 text-center bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400 font-medium">Nenhum dado encontrado para os filtros selecionados.</div>
+        <div className="p-10 md:p-20 text-center bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400 font-medium">Nenhum dado encontrado para os filtros selecionados.</div>
       ) : (
-        <div className="space-y-6 animate-in fade-in duration-500">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-             <KPICard title="Total Ovos" value={stats.totalEggs.toLocaleString('pt-BR')} subtext="(acumulado no período)" icon={<Egg />} color="blue" />
-             <KPICard title="Taxa Média Postura" value={`${stats.avgLayingRate.toFixed(1)}%`} subtext="(produção/população)" icon={<TrendingUp />} color="green" />
-             <KPICard title="Aves Vivas" value={stats.currentBirds.toLocaleString('pt-BR')} subtext="(saldo atual somado)" icon={<Bird />} color="purple" />
-             <KPICard title="Mortalidade" value={`${stats.totalMortality} (${stats.mortalityRate.toFixed(2)}%)`} subtext="Total e Taxa no Período" icon={<AlertTriangle />} color="red" />
+        <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+             <KPICard title="Total Ovos" value={stats.totalEggs.toLocaleString('pt-BR')} subtext="(acumulado)" icon={<Egg />} color="blue" />
+             <KPICard title="Taxa Postura" value={`${stats.avgLayingRate.toFixed(1)}%`} icon={<TrendingUp />} color="green" />
+             <KPICard title="Aves Vivas" value={stats.currentBirds.toLocaleString('pt-BR')} icon={<Bird />} color="purple" />
+             <KPICard title="Mortalidade" value={`${stats.totalMortality} (${stats.mortalityRate.toFixed(2)}%)`} icon={<AlertTriangle />} color="red" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-8">
+            <div className="lg:col-span-2 bg-white p-4 md:p-8 rounded-2xl border border-gray-100 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                 <h3 className="text-sm font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
                   <div className="w-2 h-5 bg-indigo-600 rounded-full"></div> Qualidade dos Ovos
                 </h3>
-                <div className="flex flex-wrap gap-x-4 gap-y-2 justify-end">
-                  <LegendItem label="Limpos" color="bg-emerald-500" /> <LegendItem label="Sujos" color="bg-orange-500" /> <LegendItem label="Trincados" color="bg-red-500" /> <LegendItem label="Cama" color="bg-purple-500" />
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  <LegendItem label="Limpos" color="bg-emerald-500" /> 
+                  <LegendItem label="Sujos" color="bg-orange-500" /> 
+                  <LegendItem label="Trincados" color="bg-red-500" /> 
+                  <LegendItem label="Cama" color="bg-purple-500" />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
                 <div className="relative flex justify-center">
-                  <svg viewBox="0 0 100 100" className="w-48 h-48 -rotate-90">
+                  <svg viewBox="0 0 100 100" className="w-40 h-40 md:w-48 md:h-48 -rotate-90">
                     <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
                     {qualitySegments.map((seg, idx) => (
                       <circle key={idx} cx="50" cy="50" r="40" fill="transparent" stroke={seg.color} strokeWidth="12" strokeDasharray={`${seg.dash} 251.32`} strokeDashoffset={seg.offset} className="transition-all duration-1000 ease-out" />
                     ))}
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <p className="text-3xl font-black text-gray-800 leading-none">{((stats.quality.clean / (stats.quality.total || 1)) * 100).toFixed(0)}%</p>
+                    <p className="text-2xl md:text-3xl font-black text-gray-800 leading-none">{((stats.quality.clean / (stats.quality.total || 1)) * 100).toFixed(0)}%</p>
                     <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">Ovos Limpos</p>
                   </div>
                 </div>
@@ -532,10 +497,10 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
               </div>
             </div>
 
-            <div className="space-y-4">
-              <KPICard title="Peso Médio Ovos (g)" value={`${stats.avgEggWeight.toFixed(1)} g`} subtext="" icon={<Scale />} color="teal" />
-              <KPICard title="Peso Médio Aves (g)" value={`${stats.avgBirdWeight.toFixed(1)} g`} subtext="" icon={<Weight />} color="indigo" />
-              <div className="bg-emerald-600 p-6 rounded-2xl shadow-lg shadow-emerald-100 flex items-center gap-4 text-white">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+              <KPICard title="Peso Ovos (g)" value={`${stats.avgEggWeight.toFixed(1)} g`} icon={<Scale />} color="teal" />
+              <KPICard title="Peso Aves (g)" value={`${stats.avgBirdWeight.toFixed(1)} g`} icon={<Weight />} color="indigo" />
+              <div className="sm:col-span-2 lg:col-span-1 bg-emerald-600 p-6 rounded-2xl shadow-lg shadow-emerald-100 flex items-center gap-4 text-white">
                 <div className="p-3 bg-white/20 rounded-xl"><CheckCircle2 size={24} /></div>
                 <div><p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Status de Saúde</p><p className="text-lg font-black">Lote Saudável</p></div>
               </div>
@@ -543,18 +508,15 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
           </div>
 
           <div className="space-y-6">
-            <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm w-full">
-               <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-sm font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
-                    <div className="w-2 h-5 bg-blue-600 rounded-full"></div> Desempenho Produtivo (Mensal)
-                  </h3>
-               </div>
-               <div className="h-72 w-full">{renderLineChart()}</div>
+            <div className="bg-white p-4 md:p-8 rounded-2xl border border-gray-100 shadow-sm w-full">
+               <h3 className="text-sm font-black text-gray-700 uppercase tracking-widest flex items-center gap-2 mb-6">
+                 <div className="w-2 h-5 bg-blue-600 rounded-full"></div> Produção Mensal
+               </h3>
+               <div className="h-64 w-full">{renderLineChart()}</div>
             </div>
 
-            {/* Terceiro Gráfico: Curva de Maturidade Refinada */}
-            <div className="bg-white px-8 pt-4 pb-12 rounded-2xl border border-gray-100 shadow-sm w-full">
-               <div className="w-full h-[400px]">{renderMaturityChart()}</div>
+            <div className="bg-white p-4 md:px-8 pt-4 pb-8 md:pb-12 rounded-2xl border border-gray-100 shadow-sm w-full">
+               <div className="w-full min-h-[400px]">{renderMaturityChart()}</div>
             </div>
           </div>
         </div>
@@ -571,10 +533,10 @@ const LegendItem: React.FC<{ label: string; color: string; customBg?: string }> 
 );
 
 const FilterSelect = ({ value, onChange, options, customLabels }: { value: string, onChange: (v: string) => void, options: string[], customLabels?: { label: string, value: string }[] }) => (
-  <div className="relative">
+  <div className="relative w-full lg:w-auto">
     <select 
       value={value} onChange={e => onChange(e.target.value)}
-      className="appearance-none bg-gray-50 border border-gray-100 text-[10px] font-black py-2 pl-3 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer uppercase tracking-tight"
+      className="appearance-none w-full bg-gray-50 border border-gray-100 text-[10px] font-black py-2.5 pl-3 pr-8 rounded-lg outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer uppercase tracking-tight"
     >
       {options.map(o => {
         const custom = customLabels?.find(cl => cl.value === o);
@@ -590,21 +552,22 @@ const QualityBox = ({ label, value, total, color }: { label: string, value: numb
   return (
     <div className={`p-4 rounded-xl border ${colorMap[color]} transition-transform hover:scale-[1.02]`}>
       <p className="text-[8px] font-black uppercase tracking-widest mb-1 opacity-70">{label}</p>
-      <p className="text-lg font-black">{value.toLocaleString('pt-BR')}</p>
+      <p className="text-base md:text-lg font-black">{value.toLocaleString('pt-BR')}</p>
       <p className="text-[9px] font-bold opacity-60">{((value / (total || 1)) * 100).toFixed(1)}%</p>
     </div>
   );
 };
 
-const KPICard = ({ title, value, subtext, icon, color }: { title: string, value: string, subtext: string, icon: React.ReactNode, color: string }) => {
+// FIX: Changed icon type to React.ReactElement and cast to any in cloneElement to resolve type errors
+const KPICard = ({ title, value, subtext, icon, color }: { title: string, value: string, subtext?: string, icon: React.ReactElement, color: string }) => {
   const colorMap: Record<string, string> = { blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600', purple: 'bg-purple-50 text-purple-600', red: 'bg-red-50 text-red-600', teal: 'bg-teal-50 text-teal-600', indigo: 'bg-indigo-50 text-indigo-600' };
   return (
-    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex items-center gap-5 w-full">
-      <div className={`p-4 rounded-xl ${colorMap[color] || 'bg-gray-50'}`}>{React.cloneElement(icon as React.ReactElement, { size: 24, strokeWidth: 2.5 })}</div>
-      <div className="flex-1">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{title}</p>
-        <p className="text-2xl font-black text-gray-800 tracking-tight">{value}</p>
-        {subtext && <p className="text-[9px] font-medium text-gray-400 mt-0.5">{subtext}</p>}
+    <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-100 shadow-sm flex items-center gap-4 md:gap-5 w-full">
+      <div className={`p-3 md:p-4 rounded-xl ${colorMap[color] || 'bg-gray-50'}`}>{React.cloneElement(icon as React.ReactElement<any>, { size: 20, strokeWidth: 2.5 })}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 md:mb-1 truncate">{title}</p>
+        <p className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">{value}</p>
+        {subtext && <p className="text-[9px] font-medium text-gray-400 mt-0.5 truncate">{subtext}</p>}
       </div>
     </div>
   );

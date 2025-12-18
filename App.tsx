@@ -10,11 +10,12 @@ import { GeneralDashboard } from './components/GeneralDashboard';
 import { AIReports } from './components/AIReports';
 import { LandingPage } from './components/LandingPage';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
-import { LayoutGrid } from 'lucide-react';
+import { LayoutGrid, Menu, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   const [records, setRecords] = useState<ProductionRecord[]>(() => {
     const saved = localStorage.getItem('siglab_records');
@@ -125,6 +126,7 @@ const App: React.FC = () => {
     if (view === 'new-production') setEditingRecord(null);
     if (view === 'new-batch-characterization') setEditingBatch(null);
     setCurrentView(view);
+    setIsSidebarOpen(false); // Fecha o menu ao navegar no mobile
   };
 
   if (showLanding) {
@@ -194,29 +196,57 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] animate-in fade-in duration-500">
-      <Sidebar currentView={currentView} onNavigate={handleNavigate} />
-      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
-        <div className="w-full max-w-[98%] mx-auto pb-10">
-          <div className="flex justify-between items-center mb-10">
-            <div className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavigate('dashboard')}>
-              <div className="w-12 h-12 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-md transition-transform hover:scale-110">
-                <svg viewBox="0 0 100 100" className="w-9 h-9" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="50" cy="50" r="40" stroke="#0891b2" strokeWidth="2" strokeDasharray="2 4" />
-                  <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+    <div className="flex min-h-screen bg-[#f8fafc]">
+      {/* Sidebar Híbrida */}
+      <Sidebar 
+        currentView={currentView} 
+        onNavigate={handleNavigate} 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+      />
+      
+      {/* Área Principal adaptável */}
+      <main className="flex-1 lg:ml-64 p-4 md:p-8 overflow-y-auto h-screen transition-all">
+        <div className="w-full max-w-[1400px] mx-auto pb-10">
+          
+          {/* Header Superior - Mobile Header & Desktop Header Combined */}
+          <div className="flex justify-between items-center mb-6 md:mb-10">
+            {/* Logo Mobile Toggle */}
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <Menu size={24} className="text-gray-600" />
+              </button>
+              
+              <div 
+                className="flex items-center gap-3 group cursor-pointer" 
+                onClick={() => handleNavigate('dashboard')}
+              >
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-md transition-transform hover:scale-110">
+                  <svg viewBox="0 0 100 100" className="w-7 h-7 md:w-9 md:h-9" fill="none">
+                    <circle cx="50" cy="50" r="40" stroke="#0891b2" strokeWidth="2" strokeDasharray="2 4" />
+                    <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <h1 className="text-lg md:text-2xl font-black text-[#1e293b] tracking-tight uppercase">
+                  SIGLAB <span className="bg-gradient-to-r from-cyan-600 to-emerald-500 bg-clip-text text-transparent">AVIÁRIO</span>
+                </h1>
               </div>
-              <h1 className="text-2xl font-black text-[#1e293b] tracking-tight uppercase">
-                SIGLAB <span className="bg-gradient-to-r from-cyan-600 to-emerald-500 bg-clip-text text-transparent">AVIÁRIO</span>
-              </h1>
             </div>
-            <div className="flex text-[10px] font-black text-gray-400 items-center uppercase tracking-widest">
+
+            {/* Badges / Status Desktop Only */}
+            <div className="hidden sm:flex text-[10px] font-black text-gray-400 items-center uppercase tracking-widest">
               <span className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 text-blue-600 font-black">
                 SISTEMA v1.5.0 PREMIUM
               </span>
             </div>
           </div>
-          {renderContent()}
+
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {renderContent()}
+          </div>
         </div>
       </main>
     </div>
