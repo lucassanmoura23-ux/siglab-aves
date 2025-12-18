@@ -7,7 +7,8 @@ import {
   PlusCircle, 
   Box, 
   FileText,
-  X
+  X,
+  Share2
 } from 'lucide-react';
 import { ViewState } from '../types';
 
@@ -42,9 +43,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
       ]
     },
     {
-      title: 'ANÁLISES',
+      title: 'FERRAMENTAS',
       items: [
         { id: 'ai-reports', label: 'Relatórios IA', icon: FileText },
+        { id: 'sync-devices', label: 'Sincronizar Dispositivos', icon: Share2 },
       ]
     }
   ];
@@ -120,14 +122,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
 
         {/* Footer / Developers */}
         <div className="p-6 border-t border-gray-50 bg-gray-50/50 space-y-4">
-          <div className="flex items-center justify-between">
-             <span className="text-[9px] font-black text-blue-900 opacity-40 uppercase tracking-widest">System Status</span>
-             <div className="flex gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
-             </div>
-          </div>
-
           <div className="space-y-3">
             <div>
               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 opacity-60 text-center">Desenvolvimento</p>
@@ -142,10 +136,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="pt-2 border-t border-gray-200/50">
-            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">v1.5.0 Premium Edition</p>
           </div>
         </div>
       </div>

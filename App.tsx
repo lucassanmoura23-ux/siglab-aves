@@ -9,8 +9,9 @@ import { AviaryDashboard } from './components/AviaryDashboard';
 import { GeneralDashboard } from './components/GeneralDashboard';
 import { AIReports } from './components/AIReports';
 import { LandingPage } from './components/LandingPage';
+import { SyncManager } from './components/SyncManager';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
-import { LayoutGrid, Menu, X } from 'lucide-react';
+import { LayoutGrid, Menu, X, Share2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
@@ -122,6 +123,11 @@ const App: React.FC = () => {
     setRecords(prev => syncProductionWithBatches(prev, updatedBatches));
   };
 
+  const handleSyncImport = (data: { records: any[], batchRecords: any[] }) => {
+    setRecords(data.records);
+    setBatchRecords(data.batchRecords);
+  };
+
   const handleNavigate = (view: ViewState) => {
     if (view === 'new-production') setEditingRecord(null);
     if (view === 'new-batch-characterization') setEditingBatch(null);
@@ -184,6 +190,13 @@ const App: React.FC = () => {
         return <AviaryDashboard records={records} />;
       case 'ai-reports':
         return <AIReports records={records} batchRecords={batchRecords} />;
+      case 'sync-devices':
+        return (
+          <SyncManager 
+            exportData={() => ({ records, batchRecords })} 
+            onImport={handleSyncImport} 
+          />
+        );
       default:
         return (
           <div className="flex flex-col items-center justify-center h-[600px] text-gray-400 bg-white rounded-xl border border-gray-200 border-dashed">
@@ -237,7 +250,14 @@ const App: React.FC = () => {
             </div>
 
             {/* Badges / Status Desktop Only */}
-            <div className="hidden sm:flex text-[10px] font-black text-gray-400 items-center uppercase tracking-widest">
+            <div className="hidden sm:flex text-[10px] font-black text-gray-400 items-center uppercase tracking-widest gap-3">
+              <button 
+                onClick={() => handleNavigate('sync-devices')}
+                className="bg-blue-50 text-blue-600 p-2 rounded-lg hover:bg-blue-100 transition-colors"
+                title="Sincronizar Celular"
+              >
+                <Share2 size={16} />
+              </button>
               <span className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 text-blue-600 font-black">
                 SISTEMA v1.5.0 PREMIUM
               </span>

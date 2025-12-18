@@ -49,4 +49,5 @@ export type ViewState =
   | 'new-production' 
   | 'batch-characteristics' 
   | 'new-batch-characterization'
-  | 'ai-reports';
+  | 'ai-reports'
+  | 'sync-devices';
