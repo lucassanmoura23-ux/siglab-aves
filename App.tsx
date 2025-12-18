@@ -8,10 +8,12 @@ import { BatchForm } from './components/BatchForm';
 import { AviaryDashboard } from './components/AviaryDashboard';
 import { GeneralDashboard } from './components/GeneralDashboard';
 import { AIReports } from './components/AIReports';
+import { LandingPage } from './components/LandingPage';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
 import { LayoutGrid } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [showLanding, setShowLanding] = useState(true);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   
   const [records, setRecords] = useState<ProductionRecord[]>(() => {
@@ -125,6 +127,10 @@ const App: React.FC = () => {
     setCurrentView(view);
   };
 
+  if (showLanding) {
+    return <LandingPage onEnter={() => setShowLanding(false)} />;
+  }
+
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
@@ -188,7 +194,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc]">
+    <div className="flex min-h-screen bg-[#f8fafc] animate-in fade-in duration-500">
       <Sidebar currentView={currentView} onNavigate={handleNavigate} />
       <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">
         <div className="w-full max-w-[98%] mx-auto pb-10">
