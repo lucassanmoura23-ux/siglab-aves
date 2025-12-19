@@ -1,150 +1,115 @@
 
 import React, { useState } from 'react';
-import { Share2, Copy, Download, Upload, CheckCircle2, AlertTriangle, Smartphone, Laptop } from 'lucide-react';
+import { Cloud, Link, Smartphone, Laptop, CheckCircle2, AlertCircle, Copy, RefreshCcw } from 'lucide-react';
 
 interface SyncManagerProps {
-  onImport: (data: { records: any[], batchRecords: any[] }) => void;
-  exportData: () => { records: any[], batchRecords: any[] };
+  currentKey: string;
+  onUpdateKey: (key: string) => void;
 }
 
-export const SyncManager: React.FC<SyncManagerProps> = ({ onImport, exportData }) => {
-  const [syncToken, setSyncToken] = useState('');
-  const [importToken, setImportToken] = useState('');
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+export const SyncManager: React.FC<SyncManagerProps> = ({ currentKey, onUpdateKey }) => {
+  const [inputKey, setInputKey] = useState(currentKey);
+  const [isSaved, setIsSaved] = useState(false);
 
-  const handleGenerateToken = () => {
-    const data = exportData();
-    const stringified = JSON.stringify(data);
-    // Usando btoa para uma codificação simples em base64 (ajustado para unicode)
-    const encoded = btoa(unescape(encodeURIComponent(stringified)));
-    setSyncToken(encoded);
-    setStatus('idle');
-  };
-
-  const handleCopyToken = () => {
-    navigator.clipboard.writeText(syncToken);
-    setStatus('success');
-    setTimeout(() => setStatus('idle'), 3000);
-  };
-
-  const handleImport = () => {
-    try {
-      const decoded = decodeURIComponent(escape(atob(importToken)));
-      const data = JSON.parse(decoded);
-      if (data.records && data.batchRecords) {
-        onImport(data);
-        setStatus('success');
-        setImportToken('');
-      } else {
-        throw new Error("Formato inválido");
-      }
-    } catch (e) {
-      setStatus('error');
+  const handleSave = () => {
+    if (!inputKey.trim()) {
+      alert("Por favor, digite uma chave de acesso.");
+      return;
     }
+    onUpdateKey(inputKey.toUpperCase().trim());
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 3000);
+  };
+
+  const generateRandomKey = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setInputKey(result);
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(currentKey);
+    alert("Código copiado!");
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-20">
-      <div className="bg-white p-6 md:p-8 rounded-2xl border border-gray-100 shadow-sm text-center">
-        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <Share2 size={32} />
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-xl text-center space-y-4">
+        <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+          <Cloud size={40} />
         </div>
-        <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight mb-2">Conectar Dispositivos</h2>
-        <p className="text-gray-500 max-w-md mx-auto">
-          Transfira seus dados entre o notebook e o celular de forma rápida e segura sem necessidade de internet constante.
+        <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Conectar Dispositivos</h2>
+        <p className="text-gray-500 text-sm max-w-sm mx-auto">
+          Use o mesmo código abaixo em todos os seus aparelhos para que os dados sejam sincronizados automaticamente.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Exportar do Notebook */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-              <Laptop size={20} />
-            </div>
-            <h3 className="font-black text-sm text-gray-800 uppercase tracking-widest">Enviar do Notebook</h3>
-          </div>
-          
-          <p className="text-xs text-gray-500 leading-relaxed">
-            Clique no botão abaixo para gerar o código de sincronização com todos os seus dados atuais.
-          </p>
-
-          {!syncToken ? (
+      <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-lg space-y-6">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">Seu Código de Acesso</label>
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              value={inputKey}
+              onChange={(e) => setInputKey(e.target.value)}
+              placeholder="Ex: FAZENDA-MODELO-01"
+              className="flex-1 bg-gray-50 border border-gray-200 px-4 py-4 rounded-2xl font-black text-lg text-blue-600 tracking-widest uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+            />
             <button 
-              onClick={handleGenerateToken}
-              className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+              onClick={generateRandomKey}
+              title="Gerar chave aleatória"
+              className="p-4 bg-gray-100 text-gray-500 rounded-2xl hover:bg-gray-200 transition-colors"
             >
-              Gerar Código de Sincronização
+              <RefreshCcw size={20} />
             </button>
-          ) : (
-            <div className="space-y-3">
-              <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 break-all text-[10px] font-mono text-gray-400 max-h-32 overflow-y-auto">
-                {syncToken}
-              </div>
-              <button 
-                onClick={handleCopyToken}
-                className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-600 transition-all"
-              >
-                {status === 'success' ? <CheckCircle2 size={16} /> : <Copy size={16} />}
-                {status === 'success' ? 'Copiado para Área de Transferência!' : 'Copiar Código'}
-              </button>
-              <p className="text-[10px] text-center text-amber-600 font-bold uppercase">
-                Envie este código para o seu celular (via WhatsApp, Email, etc).
-              </p>
-            </div>
-          )}
+          </div>
         </div>
 
-        {/* Importar no Celular */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-              <Smartphone size={20} />
+        <button 
+          onClick={handleSave}
+          className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg flex items-center justify-center gap-2 ${
+            isSaved ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
+          }`}
+        >
+          {isSaved ? <CheckCircle2 size={18} /> : <Link size={18} />}
+          {isSaved ? 'Conectado com Sucesso!' : 'Conectar Agora'}
+        </button>
+
+        {currentKey && (
+          <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="text-emerald-500" size={20} />
+              <div>
+                <p className="text-[10px] font-black text-emerald-800 uppercase">Sincronização Ativa</p>
+                <p className="text-xs font-bold text-emerald-600">{currentKey}</p>
+              </div>
             </div>
-            <h3 className="font-black text-sm text-gray-800 uppercase tracking-widest">Receber no Celular</h3>
+            <button onClick={copyToClipboard} className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-xl transition-colors">
+              <Copy size={16} />
+            </button>
           </div>
-          
-          <p className="text-xs text-gray-500 leading-relaxed">
-            Cole o código de sincronização gerado no outro dispositivo para atualizar este aplicativo.
-          </p>
+        )}
+      </div>
 
-          <textarea 
-            value={importToken}
-            onChange={(e) => setImportToken(e.target.value)}
-            placeholder="Cole o código aqui..."
-            className="w-full h-32 p-4 bg-gray-50 border border-gray-100 rounded-xl text-[10px] font-mono outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-          />
-
-          <button 
-            onClick={handleImport}
-            disabled={!importToken}
-            className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
-              !importToken ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-100'
-            }`}
-          >
-            Sincronizar Agora
-          </button>
-
-          {status === 'error' && (
-            <div className="flex items-center gap-2 text-red-500 text-[10px] font-black uppercase">
-              <AlertTriangle size={14} /> Código Inválido ou Corrompido
-            </div>
-          )}
-          {status === 'success' && !syncToken && (
-            <div className="flex items-center gap-2 text-emerald-500 text-[10px] font-black uppercase">
-              <CheckCircle2 size={14} /> Dados Sincronizados com Sucesso!
-            </div>
-          )}
+      <div className="grid grid-cols-2 gap-4 text-center">
+        <div className="bg-white p-6 rounded-3xl border border-gray-100">
+          <Laptop size={24} className="mx-auto mb-2 text-gray-400" />
+          <p className="text-[10px] font-black text-gray-800 uppercase">Notebook</p>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-gray-100">
+          <Smartphone size={24} className="mx-auto mb-2 text-gray-400" />
+          <p className="text-[10px] font-black text-gray-800 uppercase">Celular</p>
         </div>
       </div>
 
-      <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100">
-        <h4 className="text-[10px] font-black text-blue-900 uppercase tracking-widest mb-2">Como funciona?</h4>
-        <ul className="text-xs text-blue-800 space-y-2 opacity-80 leading-relaxed">
-          <li>1. No <strong>Notebook</strong>: Gere o código e copie-o.</li>
-          <li>2. No <strong>Celular</strong>: Abra esta mesma tela e cole o código.</li>
-          <li>3. O SIGLAB unificará os dados e salvará no armazenamento interno do celular.</li>
-        </ul>
+      <div className="flex gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+        <AlertCircle className="text-amber-600 shrink-0" size={18} />
+        <p className="text-[10px] font-bold text-amber-800 leading-tight">
+          IMPORTANTE: Não compartilhe seu código com estranhos. Quem tiver seu código poderá ver e alterar todos os seus registros de produção.
+        </p>
       </div>
     </div>
   );
