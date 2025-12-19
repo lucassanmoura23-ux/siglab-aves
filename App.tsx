@@ -10,7 +10,7 @@ import { GeneralDashboard } from './components/GeneralDashboard';
 import { AIReports } from './components/AIReports';
 import { LandingPage } from './components/LandingPage';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
-import { Menu } from 'lucide-react';
+import { Menu, Plus, LayoutGrid } from 'lucide-react';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
@@ -77,6 +77,27 @@ const App: React.FC = () => {
   }
 
   const renderContent = () => {
+    // Se não houver registros e estiver no dashboard, mostra um estado vazio amigável
+    if (currentView === 'dashboard' && records.length === 0 && batchRecords.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in duration-700">
+          <div className="w-24 h-24 bg-blue-50 text-blue-200 rounded-full flex items-center justify-center mb-6">
+            <LayoutGrid size={48} />
+          </div>
+          <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Bem-vindo ao SIGLAB</h3>
+          <p className="text-slate-400 font-medium max-w-sm mx-auto mt-2 px-4">
+            Comece cadastrando seu primeiro lote em "Caracterização Lotes" para poder lançar a produção diária.
+          </p>
+          <button 
+            onClick={() => handleNavigate('batch-characteristics')}
+            className="mt-8 bg-[#0f172a] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 active:scale-95 transition-all"
+          >
+            Cadastrar Primeiro Lote
+          </button>
+        </div>
+      );
+    }
+
     switch (currentView) {
       case 'dashboard':
         return <GeneralDashboard records={records} batchRecords={batchRecords} />;
@@ -150,15 +171,15 @@ const App: React.FC = () => {
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc] overflow-x-hidden">
-      {/* Sidebar Overlay no Mobile */}
+      {/* Overlay Mobile */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-300"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-300"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar content */}
+      {/* Sidebar (Drawer no mobile, Fixo no Desktop) */}
       <Sidebar 
         currentView={currentView} 
         onNavigate={handleNavigate} 
@@ -166,42 +187,68 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)} 
       />
       
-      <main className={`flex-1 transition-all duration-300 lg:ml-64 w-full`}>
-        <div className="p-4 md:p-8 pt-6">
-          <header className="flex justify-between items-center mb-8 bg-white/50 p-2 rounded-2xl backdrop-blur-sm lg:bg-transparent lg:p-0">
-            <div className="flex items-center gap-3">
-              {/* Botão Menu Mobile no Cabeçalho */}
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-                aria-label="Menu"
-              >
-                <Menu size={24} />
-              </button>
-              
-              <div className="flex items-center gap-2 group cursor-pointer" onClick={() => handleNavigate('dashboard')}>
-                <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg transition-transform group-hover:scale-105">
-                  <svg viewBox="0 0 100 100" className="w-6 h-6 md:w-8 md:h-8" fill="white">
-                    <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" fill="white" />
-                  </svg>
-                </div>
-                <h1 className="text-lg md:text-xl font-black text-[#1e293b] tracking-tighter uppercase">
-                  SIGLAB <span className="text-blue-600">AVIÁRIO</span>
-                </h1>
-              </div>
+      <main className="flex-1 lg:ml-64 w-full transition-all duration-300">
+        {/* Header Mobile Otimizado */}
+        <header className="lg:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 p-4 flex justify-between items-center">
+          <button 
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 text-slate-600 active:bg-slate-100 rounded-xl transition-all"
+            aria-label="Abrir Menu"
+          >
+            <Menu size={24} />
+          </button>
+          
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-black tracking-tighter text-[#1e293b] uppercase">
+              SIGLAB <span className="text-blue-600">AVIÁRIO</span>
+            </h1>
+          </div>
+          
+          <div className="w-10"></div>
+        </header>
+
+        <div className="p-4 md:p-8 pt-6 max-w-7xl mx-auto pb-24 lg:pb-8">
+          {/* Título da Visão no Desktop */}
+          <header className="hidden lg:flex justify-between items-center mb-10">
+            <div>
+              <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
+                {currentView === 'dashboard' && 'Painel de Controle'}
+                {currentView === 'new-production' && 'Lançar Produção'}
+                {currentView === 'daily-records' && 'Histórico de Produção'}
+                {currentView === 'batch-characteristics' && 'Gestão de Lotes'}
+                {currentView === 'new-batch-characterization' && 'Caracterização de Lote'}
+                {currentView === 'aviary-details' && 'Análise por Aviário'}
+                {currentView === 'ai-reports' && 'Relatórios com IA'}
+              </h2>
+              <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">
+                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
             </div>
             
-            <div className="hidden sm:block">
-               <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 uppercase tracking-widest">
-                v1.5.0 Premium
-              </span>
-            </div>
+            {currentView !== 'new-production' && (
+              <button 
+                onClick={() => handleNavigate('new-production')}
+                className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-100 flex items-center gap-2 hover:bg-blue-700 transition-all hover:scale-105 active:scale-95"
+              >
+                <Plus size={18} /> Novo Registro
+              </button>
+            )}
           </header>
 
-          <div className="max-w-7xl mx-auto">
+          <div className="w-full">
             {renderContent()}
           </div>
         </div>
+
+        {/* Botão Flutuante (FAB) apenas no Mobile para acesso rápido ao Novo Registro */}
+        {currentView !== 'new-production' && currentView !== 'new-batch-characterization' && (
+          <button 
+            onClick={() => handleNavigate('new-production')}
+            className="lg:hidden fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform z-20 border-4 border-white"
+          >
+            <Plus size={28} />
+          </button>
+        )}
       </main>
     </div>
   );
