@@ -11,7 +11,7 @@ import { AIReports } from './components/AIReports';
 import { LandingPage } from './components/LandingPage';
 import { SyncManager } from './components/SyncManager';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
-import { LayoutGrid, Menu, X, Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { LayoutGrid, Menu, X, Cloud, CloudOff, RefreshCw, CheckCircle2, Wifi, WifiOff } from 'lucide-react';
 import { pushToCloud, fetchFromCloud } from './services/cloudSyncService';
 
 const App: React.FC = () => {
@@ -41,55 +41,66 @@ const App: React.FC = () => {
 
   const handleManualPush = useCallback(async () => {
     if (!cloudKey || cloudKey.length < 2) {
-      alert("Configure um código de acesso primeiro!");
+      alert("⚠️ Digite e SALVE um código primeiro!");
       return;
     }
     setSyncStatus('syncing');
+    
+    // Pequeno delay para feedback visual
+    await new Promise(r => setTimeout(r, 500));
+    
     const success = await pushToCloud(cloudKey, { records, batchRecords });
     if (success) {
       setSyncStatus('synced');
-      alert("Dados SALVOS na nuvem com sucesso!");
+      alert("✅ DADOS ENVIADOS!\n\nAgora você pode clicar em 'BUSCAR' no outro aparelho usando o mesmo código.");
     } else {
       setSyncStatus('error');
-      alert("Erro ao salvar. Verifique sua internet.");
+      alert("❌ ERRO AO SALVAR\n\n1. Verifique se o código é simples (apenas letras e números).\n2. Verifique sua conexão com a internet.\n3. Se o erro persistir, tente um código diferente.");
     }
   }, [cloudKey, records, batchRecords]);
 
   const handleManualPull = useCallback(async () => {
     if (!cloudKey || cloudKey.length < 2) {
-      alert("Configure um código de acesso primeiro!");
+      alert("⚠️ Digite e SALVE um código primeiro!");
       return;
     }
     setSyncStatus('syncing');
+    
     const cloudData = await fetchFromCloud(cloudKey);
     if (cloudData) {
-      setRecords(cloudData.records);
-      setBatchRecords(cloudData.batchRecords);
-      setSyncStatus('synced');
-      alert("Dados BUSCADOS da nuvem com sucesso!");
+      // Confirmação para não apagar dados locais sem querer
+      const confirmMsg = records.length > 0 
+        ? "Isso irá substituir os dados atuais deste aparelho pelos dados que estão na nuvem. Deseja continuar?"
+        : "Dados encontrados! Deseja baixar agora?";
+        
+      if (window.confirm(confirmMsg)) {
+        setRecords(cloudData.records);
+        setBatchRecords(cloudData.batchRecords);
+        setSyncStatus('synced');
+        alert("✅ DADOS RECUPERADOS COM SUCESSO!");
+      } else {
+        setSyncStatus('idle');
+      }
     } else {
       setSyncStatus('error');
-      alert("Nenhum dado encontrado ou erro de conexão.");
+      alert("ℹ️ NENHUM DADO NA NUVEM\n\nNão encontramos nada para o código '" + cloudKey + "'. Certifique-se de que você clicou em SALVAR no outro aparelho primeiro.");
     }
-  }, [cloudKey]);
+  }, [cloudKey, records.length]);
 
-  // Efeito para persistência local
+  // Persistência Local
   useEffect(() => {
     localStorage.setItem('siglab_records', JSON.stringify(records));
     localStorage.setItem('siglab_batch_records', JSON.stringify(batchRecords));
     localStorage.setItem('siglab_cloud_key', cloudKey);
   }, [records, batchRecords, cloudKey]);
 
-  // Tenta conectar automaticamente ao abrir o sistema
+  // Verificação de conexão ao abrir
   useEffect(() => {
     if (cloudKey && cloudKey.length >= 2) {
       setSyncStatus('syncing');
       fetchFromCloud(cloudKey).then(data => {
-        if (data) {
-          setSyncStatus('synced');
-        } else {
-          setSyncStatus('idle');
-        }
+        if (data) setSyncStatus('synced');
+        else setSyncStatus('idle');
       }).catch(() => setSyncStatus('error'));
     }
   }, [cloudKey]);
@@ -244,21 +255,21 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Sync Badge no Cabeçalho */}
+            {/* Indicador de Status Centralizado */}
             <div className="flex items-center gap-2">
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all shadow-sm ${
                 syncStatus === 'synced' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
                 syncStatus === 'syncing' ? 'bg-blue-50 border-blue-100 text-blue-600' :
                 syncStatus === 'error' ? 'bg-red-50 border-red-100 text-red-600' :
                 'bg-gray-50 border-gray-100 text-gray-400'
               }`}>
                 {syncStatus === 'syncing' ? <RefreshCw size={12} className="animate-spin" /> : 
-                 syncStatus === 'synced' ? <CheckCircle2 size={12} /> : 
-                 syncStatus === 'error' ? <CloudOff size={12} /> : <Cloud size={12} />}
+                 syncStatus === 'synced' ? <Wifi size={12} /> : 
+                 syncStatus === 'error' ? <WifiOff size={12} /> : <Cloud size={12} />}
                 <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">
                   {syncStatus === 'syncing' ? 'Conectando...' : 
                    syncStatus === 'synced' ? 'Nuvem OK' : 
-                   syncStatus === 'error' ? 'Erro Conexão' : 'Offline'}
+                   syncStatus === 'error' ? 'Erro de Sincronia' : 'Offline'}
                 </span>
               </div>
             </div>
