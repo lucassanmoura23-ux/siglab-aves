@@ -109,7 +109,10 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
       }
 
       return true;
-    }).sort((a, b) => b.date.localeCompare(a.date)); // Ordem cronológica decrescente (mais recente primeiro)
+    }).sort((a, b) => {
+      // Ordenação cronológica estrita (mais recente primeiro)
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
   }, [records, searchTerm, periodFilter, yearFilter, fortnightFilter, aviaryFilter]);
 
   const formatDate = (dateString: string) => {
@@ -130,7 +133,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
     if (filteredRecords.length === 0) { alert("Não há dados."); return; }
     const headers = ["Data", "Aviario", "Lote", "Aves Vivas", "Ovos Limpos", "Ovos Sujos", "Ovos Trincados", "Ovos Cama", "Peso Ovos", "Peso Aves", "Mortalidade", "Observacoes"];
     const csvRows = [headers.join(';'), ...filteredRecords.map(r => [r.date, r.aviaryId, r.batchId || '-', r.liveBirds, r.cleanEggs, r.dirtyEggs, r.crackedEggs, r.floorEggs, r.eggWeightAvg, r.birdWeightAvg, r.mortality, `"${(r.notes || '').replace(/"/g, '""')}"`].join(';'))];
-    const csvContent = "\uFEFF" + csvRows.join('\n'); // Add BOM for Excel compatibility
+    const csvContent = "\uFEFF" + csvRows.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -149,45 +152,52 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
       const text = e.target?.result as string;
       if (!text) return;
       try {
-        const lines = text.split(/\r?\n/);
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length < 2) return;
+
         const newRecords: ProductionRecord[] = [];
-        // Pular cabeçalho
+        const header = lines[0].toLowerCase();
+        let separator = header.includes(';') ? ';' : ',';
+        const headerCols = lines[0].split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
+        
+        // Verifica se existe uma coluna de ID no início
+        const hasIdAtStart = headerCols[0] === 'id' || headerCols[0].includes('uuid');
+        const dataIndex = hasIdAtStart ? 1 : 0;
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
           
-          // Detectar separador (vírgula ou ponto e vírgula)
-          let separator = ';';
-          if (line.split(',').length > line.split(';').length) separator = ',';
+          const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
           
-          const cols = line.split(separator).map(c => c.replace(/^"|"$/g, '').trim());
-          if (cols.length < 5) continue;
+          // Mapeamento dinâmico baseado no índice de data encontrado
+          const date = cols[dataIndex];
+          // Validação básica de data (padrão ISO YYYY-MM-DD)
+          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
 
-          const date = cols[0];
-          // Validar formato de data YYYY-MM-DD
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-
-          const birds = Number(cols[3]) || 0;
-          const clean = Number(cols[4]) || 0;
-          const dirty = Number(cols[5]) || 0;
-          const cracked = Number(cols[6]) || 0;
-          const floor = Number(cols[7]) || 0;
+          const aviaryId = (cols[dataIndex + 1] || '1').replace(/\D/g, '');
+          const batchId = cols[dataIndex + 2] || 'S/L';
+          const birds = Number(cols[dataIndex + 3]) || 0;
+          const clean = Number(cols[dataIndex + 4]) || 0;
+          const dirty = Number(cols[dataIndex + 5]) || 0;
+          const cracked = Number(cols[dataIndex + 6]) || 0;
+          const floor = Number(cols[dataIndex + 7]) || 0;
           const total = clean + dirty + cracked + floor;
           
           newRecords.push({
             id: crypto.randomUUID(), 
             date: date, 
-            aviaryId: (cols[1] || '1').replace(/\D/g, ''), 
-            batchId: cols[2] || 'S/L', 
+            aviaryId: aviaryId, 
+            batchId: batchId, 
             liveBirds: birds, 
             cleanEggs: clean, 
             dirtyEggs: dirty, 
             crackedEggs: cracked, 
             floorEggs: floor, 
-            eggWeightAvg: Number(cols[8]) || 0, 
-            birdWeightAvg: Number(cols[9]) || 0, 
-            mortality: Number(cols[10]) || 0, 
-            notes: cols[11] || '', 
+            eggWeightAvg: Number(cols[dataIndex + 8]) || 0, 
+            birdWeightAvg: Number(cols[dataIndex + 9]) || 0, 
+            mortality: Number(cols[dataIndex + 10]) || 0, 
+            notes: cols[dataIndex + 11] || '', 
             createdAt: new Date().toISOString(),
             metrics: {
                 totalEggs: total, 
@@ -201,11 +211,11 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
         }
         if (newRecords.length > 0) {
           onImportRecords(newRecords);
-          alert(`${newRecords.length} registros importados com sucesso.`);
+          alert(`${newRecords.length} registros sincronizados com sucesso.`);
         } else {
-          alert("Nenhum dado válido encontrado no arquivo.");
+          alert("Nenhum dado válido encontrado. Verifique o formato do arquivo.");
         }
-      } catch (err) { alert("Erro ao processar o arquivo CSV."); }
+      } catch (err) { alert("Erro crítico ao processar CSV."); }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -213,10 +223,15 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
 
   return (
     <div className="space-y-6">
-      <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+      <input 
+        type="file" 
+        accept=".csv,text/csv" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        className="hidden" 
+      />
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={() => modalType === 'single' ? (selectedRecordId && onDeleteRecord(selectedRecordId)) : onDeleteAll()} message={modalType === 'all' ? "Deseja apagar todos os registros permanentemente?" : "Deseja apagar este registro?"} />
       
-      {/* Filtros */}
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm space-y-4">
         <div className="flex items-center gap-2 text-gray-500 text-[10px] font-black uppercase tracking-widest">
            <FilterIcon size={14} /> Filtros:
@@ -232,20 +247,18 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
         </div>
       </div>
 
-      {/* Busca e Ações */}
       <div className="flex flex-col gap-4">
         <div className="relative w-full">
           <input type="text" placeholder="Buscar data ou lote..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-100 transition-all shadow-sm" />
           <Search size={18} className="absolute left-3 top-3.5 text-gray-300" />
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none px-4 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95">Importar</button>
-          <button onClick={handleExportCSV} className="flex-1 sm:flex-none px-4 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95">Exportar</button>
-          <button onClick={() => { setModalType('all'); setIsModalOpen(true); }} className="w-full sm:w-auto px-4 py-3 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all">Apagar Tudo</button>
+        <div className="grid grid-cols-2 sm:flex gap-2">
+          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95">Importar</button>
+          <button onClick={handleExportCSV} className="px-4 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95">Exportar</button>
+          <button onClick={() => { setModalType('all'); setIsModalOpen(true); }} className="col-span-2 sm:w-auto px-4 py-3 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all">Apagar Tudo</button>
         </div>
       </div>
 
-      {/* Visualização de Tabela (Desktop) */}
       <div className="hidden lg:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden overflow-x-auto">
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-100">
@@ -264,7 +277,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {filteredRecords.map(record => (
+            {filteredRecords.length > 0 ? filteredRecords.map(record => (
               <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-4 text-[11px] font-bold text-gray-500 whitespace-nowrap">{formatDate(record.date)}</td>
                 <td className="px-4 py-4 text-[11px] font-bold text-gray-900 whitespace-nowrap">Aviário {record.aviaryId}</td>
@@ -291,12 +304,15 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
                   </div>
                 </td>
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={11} className="px-6 py-20 text-center text-gray-400 uppercase font-black text-[10px] tracking-widest">Sem registros</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Visualização de Cards (Mobile) */}
       <div className="lg:hidden space-y-4">
         {filteredRecords.length > 0 ? filteredRecords.map(record => (
           <div key={record.id} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
@@ -331,9 +347,8 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
             </div>
           </div>
         )) : (
-          <div className="px-6 py-20 text-center bg-white rounded-2xl border border-dashed border-gray-200">
-            <FileDown size={48} className="mx-auto mb-4 text-gray-200" />
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nenhum registro encontrado</p>
+          <div className="px-6 py-20 text-center bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400 uppercase font-black text-[10px]">
+            Nenhum registro encontrado
           </div>
         )}
       </div>

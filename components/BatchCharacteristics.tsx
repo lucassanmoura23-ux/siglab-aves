@@ -49,7 +49,7 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
   const getAviaryRecords = (aviaryId: string) => {
     return records
       .filter(r => r.aviaryId === aviaryId)
-      .sort((a, b) => b.date.localeCompare(a.date));
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
   const getCurrentBirds = (aviaryId: string) => {
@@ -108,38 +108,45 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
       const text = e.target?.result as string;
       if (!text) return;
       try {
-        const lines = text.split(/\r?\n/);
+        const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+        if (lines.length < 2) return;
+
         const newRecords: BatchRecord[] = [];
+        const header = lines[0].toLowerCase();
+        let separator = header.includes(';') ? ';' : ',';
+        const headerCols = lines[0].split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
+        
+        // Verifica se existe ID para pular coluna
+        const dataIndex = (headerCols[0] === 'id' || headerCols[0].includes('uuid')) ? 1 : 0;
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
           
-          let separator = ';';
-          if (line.split(',').length > line.split(';').length) separator = ',';
+          const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
           
-          const cols = line.split(separator).map(c => c.replace(/^"|"$/g, '').trim());
-          if (cols.length < 5) continue;
-
-          const date = cols[0];
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+          const date = cols[dataIndex];
+          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
 
           newRecords.push({
             id: crypto.randomUUID(),
             date: date,
-            aviaryId: (cols[1] || '1').replace(/\D/g, ''),
-            batchId: cols[2] || 'S/L',
-            ageWeeks: Number(cols[3]) || 0,
+            aviaryId: (cols[dataIndex + 1] || '1').replace(/\D/g, ''),
+            batchId: cols[dataIndex + 2] || 'S/L',
+            ageWeeks: Number(cols[dataIndex + 3]) || 0,
             currentBirds: 0,
-            weight: Number(cols[4]) || Number(cols[5]) || 0,
-            uniformity: Number(cols[5]) || Number(cols[6]) || 0,
-            feathering: (cols[6] || cols[7] || 'Bom') as any,
+            weight: Number(cols[dataIndex + 4]) || 0,
+            uniformity: Number(cols[dataIndex + 5]) || 0,
+            feathering: (cols[dataIndex + 6] || 'Bom') as any,
           });
         }
         if (newRecords.length > 0) {
           onImportRecords(newRecords);
           alert(`${newRecords.length} lotes importados.`);
-        } else alert("Nenhum dado válido.");
-      } catch (err) { alert("Erro ao importar CSV."); }
+        } else {
+          alert("Arquivo sem dados de lote válidos.");
+        }
+      } catch (err) { alert("Erro ao sincronizar lotes."); }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -147,7 +154,13 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+      <input 
+        type="file" 
+        accept=".csv,text/csv" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        className="hidden" 
+      />
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={handleConfirmDelete} message={modalType === 'all' ? "Deseja apagar todos os lotes?" : "Deseja excluir este registro de lote?"} />
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col gap-6">
