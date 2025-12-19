@@ -20,7 +20,6 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   
-  // Código de Sincronização
   const [cloudKey, setCloudKey] = useState<string>(() => {
     return localStorage.getItem('siglab_cloud_key') || '';
   });
@@ -38,48 +37,62 @@ const App: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<ProductionRecord | null>(null);
   const [editingBatch, setEditingBatch] = useState<BatchRecord | null>(null);
 
-  // --- Lógica de Sincronização ---
+  // --- Funções de Sincronização Manuais ---
 
-  const handlePushData = useCallback(async (recs: ProductionRecord[], batches: BatchRecord[]) => {
-    if (!cloudKey || cloudKey.length < 4) return;
+  const handleManualPush = useCallback(async () => {
+    if (!cloudKey || cloudKey.length < 2) {
+      alert("Configure um código de acesso primeiro!");
+      return;
+    }
     setSyncStatus('syncing');
-    const success = await pushToCloud(cloudKey, { records: recs, batchRecords: batches });
-    setSyncStatus(success ? 'synced' : 'error');
-  }, [cloudKey]);
+    const success = await pushToCloud(cloudKey, { records, batchRecords });
+    if (success) {
+      setSyncStatus('synced');
+      alert("Dados SALVOS na nuvem com sucesso!");
+    } else {
+      setSyncStatus('error');
+      alert("Erro ao salvar. Verifique sua internet.");
+    }
+  }, [cloudKey, records, batchRecords]);
 
-  const handleFetchData = useCallback(async () => {
-    if (!cloudKey || cloudKey.length < 4) return;
+  const handleManualPull = useCallback(async () => {
+    if (!cloudKey || cloudKey.length < 2) {
+      alert("Configure um código de acesso primeiro!");
+      return;
+    }
     setSyncStatus('syncing');
     const cloudData = await fetchFromCloud(cloudKey);
     if (cloudData) {
-      // Mesclar dados (prioridade para nuvem neste caso simples)
       setRecords(cloudData.records);
       setBatchRecords(cloudData.batchRecords);
       setSyncStatus('synced');
+      alert("Dados BUSCADOS da nuvem com sucesso!");
     } else {
-      setSyncStatus('idle');
+      setSyncStatus('error');
+      alert("Nenhum dado encontrado ou erro de conexão.");
     }
   }, [cloudKey]);
 
-  // Ao mudar a chave ou iniciar, buscar da nuvem
-  useEffect(() => {
-    if (cloudKey) {
-      handleFetchData();
-      localStorage.setItem('siglab_cloud_key', cloudKey);
-    }
-  }, [cloudKey, handleFetchData]);
-
-  // Ao mudar os dados locais, agendar envio para nuvem (Debounce de 2s)
+  // Efeito para persistência local
   useEffect(() => {
     localStorage.setItem('siglab_records', JSON.stringify(records));
     localStorage.setItem('siglab_batch_records', JSON.stringify(batchRecords));
+    localStorage.setItem('siglab_cloud_key', cloudKey);
+  }, [records, batchRecords, cloudKey]);
 
-    const timeout = setTimeout(() => {
-      handlePushData(records, batchRecords);
-    }, 2000);
-
-    return () => clearTimeout(timeout);
-  }, [records, batchRecords, handlePushData]);
+  // Tenta conectar automaticamente ao abrir o sistema
+  useEffect(() => {
+    if (cloudKey && cloudKey.length >= 2) {
+      setSyncStatus('syncing');
+      fetchFromCloud(cloudKey).then(data => {
+        if (data) {
+          setSyncStatus('synced');
+        } else {
+          setSyncStatus('idle');
+        }
+      }).catch(() => setSyncStatus('error'));
+    }
+  }, [cloudKey]);
 
   const syncProductionWithBatches = (currentProduction: ProductionRecord[], currentBatches: BatchRecord[]): ProductionRecord[] => {
     return currentProduction.map(prod => {
@@ -192,7 +205,8 @@ const App: React.FC = () => {
           <SyncManager 
             currentKey={cloudKey} 
             onUpdateKey={setCloudKey} 
-            onForceSync={handleFetchData}
+            onManualPush={handleManualPush}
+            onManualPull={handleManualPull}
             syncStatus={syncStatus}
           />
         );
@@ -219,18 +233,18 @@ const App: React.FC = () => {
                 <Menu size={24} className="text-gray-600" />
               </button>
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-md">
-                   <svg viewBox="0 0 100 100" className="w-7 h-7 md:w-9 md:h-9" fill="none">
-                    <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg">
+                   <svg viewBox="0 0 100 100" className="w-6 h-6 md:w-8 md:h-8" fill="white">
+                    <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" fill="white" />
                   </svg>
                 </div>
                 <h1 className="text-lg md:text-2xl font-black text-[#1e293b] tracking-tight uppercase">
-                  SIGLAB <span className="bg-gradient-to-r from-emerald-500 to-cyan-600 bg-clip-text text-transparent">AVIÁRIO</span>
+                  SIGLAB <span className="text-blue-600">AVIÁRIO</span>
                 </h1>
               </div>
             </div>
 
-            {/* Sync Badge */}
+            {/* Sync Badge no Cabeçalho */}
             <div className="flex items-center gap-2">
               <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
                 syncStatus === 'synced' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
@@ -242,9 +256,9 @@ const App: React.FC = () => {
                  syncStatus === 'synced' ? <CheckCircle2 size={12} /> : 
                  syncStatus === 'error' ? <CloudOff size={12} /> : <Cloud size={12} />}
                 <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">
-                  {syncStatus === 'syncing' ? 'Sincronizando...' : 
+                  {syncStatus === 'syncing' ? 'Conectando...' : 
                    syncStatus === 'synced' ? 'Nuvem OK' : 
-                   syncStatus === 'error' ? 'Erro Conexão' : 'Desconectado'}
+                   syncStatus === 'error' ? 'Erro Conexão' : 'Offline'}
                 </span>
               </div>
             </div>

@@ -1,101 +1,127 @@
 
 import React, { useState } from 'react';
-import { Wifi, Cloud, Smartphone, Laptop, CheckCircle2, Link, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Wifi, CloudDownload, CloudUpload, Smartphone, Laptop, CheckCircle2, AlertTriangle, RefreshCw, Save, DownloadCloud } from 'lucide-react';
 
 interface SyncManagerProps {
   currentKey: string;
   onUpdateKey: (key: string) => void;
-  onForceSync: () => void;
+  onManualPush: () => void;
+  onManualPull: () => void;
   syncStatus: 'synced' | 'syncing' | 'error' | 'idle';
 }
 
-export const SyncManager: React.FC<SyncManagerProps> = ({ currentKey, onUpdateKey, onForceSync, syncStatus }) => {
+export const SyncManager: React.FC<SyncManagerProps> = ({ currentKey, onUpdateKey, onManualPush, onManualPull, syncStatus }) => {
   const [inputKey, setInputKey] = useState(currentKey);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isKeySaved, setIsKeySaved] = useState(false);
 
-  const handleSave = () => {
-    if (inputKey.length < 4) {
-      alert("O código deve ter pelo menos 4 caracteres.");
+  const handleSaveKey = () => {
+    if (inputKey.length < 2) {
+      alert("O código deve ter pelo menos 2 caracteres.");
       return;
     }
     onUpdateKey(inputKey.toUpperCase().trim());
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    setIsKeySaved(true);
+    setTimeout(() => setIsKeySaved(false), 2000);
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header */}
-      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-xl text-center space-y-4">
-        <div className="w-20 h-20 bg-blue-600 text-white rounded-3xl flex items-center justify-center mx-auto shadow-lg">
-          <Wifi size={40} />
+    <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      {/* Card de Configuração do Código */}
+      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-xl text-center space-y-6">
+        <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center mx-auto shadow-lg">
+          <Wifi size={32} />
         </div>
-        <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Conectar Dispositivos</h2>
-        <p className="text-gray-500 text-sm max-w-sm mx-auto leading-relaxed">
-          Sincronize seu celular e seu computador. Use o mesmo código em todos os aparelhos para acessar os mesmos dados.
-        </p>
-      </div>
-
-      {/* Input de Chave */}
-      <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-lg space-y-6">
         <div className="space-y-2">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] px-1">Código de Acesso Único</label>
-          <input 
-            type="text" 
-            value={inputKey}
-            onChange={(e) => setInputKey(e.target.value)}
-            placeholder="Ex: MINHA-GRANJA-2024"
-            className="w-full bg-gray-50 border border-gray-200 px-6 py-4 rounded-2xl font-black text-xl text-blue-600 tracking-widest uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all"
-          />
+          <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Sincronizar Dispositivos</h2>
+          <p className="text-gray-500 text-xs font-medium max-w-sm mx-auto">
+            Use o mesmo código no celular e no computador para compartilhar seus registros.
+          </p>
         </div>
 
-        <button 
-          onClick={handleSave}
-          className={`w-full py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition-all shadow-lg flex items-center justify-center gap-2 ${
-            isSaved ? 'bg-emerald-500 text-white shadow-emerald-100' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100'
-          }`}
-        >
-          {isSaved ? <CheckCircle2 size={18} /> : <Link size={18} />}
-          {isSaved ? 'CÓDIGO SALVO!' : 'ATIVAR SINCRONIZAÇÃO'}
-        </button>
-
-        {currentKey && (
-          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <div className="flex flex-col gap-3">
+          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-left px-1">Seu Código de Acesso</label>
+          <div className="flex gap-2">
+            <input 
+              type="text" 
+              value={inputKey}
+              onChange={(e) => setInputKey(e.target.value)}
+              placeholder="Ex: IFMT"
+              className="flex-1 bg-gray-50 border border-gray-200 px-5 py-4 rounded-2xl font-black text-xl text-blue-600 tracking-widest uppercase outline-none focus:ring-4 focus:ring-blue-100 transition-all"
+            />
             <button 
-              onClick={onForceSync}
-              className="flex-1 py-3 px-4 bg-gray-100 text-gray-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 flex items-center justify-center gap-2"
+              onClick={handleSaveKey}
+              className={`px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-md ${
+                isKeySaved ? 'bg-emerald-500 text-white' : 'bg-gray-900 text-white hover:bg-black'
+              }`}
             >
-              <RefreshCw size={14} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
-              Forçar Atualização Agora
+              {isKeySaved ? <CheckCircle2 size={18} /> : 'SALVAR CÓDIGO'}
             </button>
           </div>
-        )}
-      </div>
-
-      {/* Como funciona */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 flex items-center gap-4">
-          <Laptop className="text-gray-300" size={32} />
-          <div>
-            <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Computador</p>
-            <p className="text-xs font-bold text-gray-400">Dados centralizados</p>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-gray-100 flex items-center gap-4">
-          <Smartphone className="text-gray-300" size={32} />
-          <div>
-            <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Celular</p>
-            <p className="text-xs font-bold text-gray-400">Coleta em campo</p>
-          </div>
         </div>
       </div>
 
-      {/* Alerta */}
-      <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-4">
-        <AlertTriangle className="text-amber-500 shrink-0" size={20} />
-        <p className="text-[10px] font-bold text-amber-800 leading-tight">
-          IMPORTANTE: Qualquer pessoa com seu código pode ver e alterar seus dados. Escolha um código difícil de adivinhar.
-        </p>
+      {/* Botões de Ação - Salvar e Buscar */}
+      {currentKey && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <button 
+            onClick={onManualPush}
+            disabled={syncStatus === 'syncing'}
+            className="group flex flex-col items-center justify-center gap-4 p-10 bg-blue-600 hover:bg-blue-700 text-white rounded-[2rem] shadow-2xl shadow-blue-100 transition-all active:scale-95 disabled:opacity-50"
+          >
+            <div className="p-4 bg-white/20 rounded-2xl group-hover:scale-110 transition-transform">
+              <CloudUpload size={32} />
+            </div>
+            <div className="text-center">
+              <p className="font-black text-sm uppercase tracking-[0.2em]">SALVAR NA NUVEM</p>
+              <p className="text-[10px] opacity-70 font-bold mt-1">Envia os dados deste aparelho</p>
+            </div>
+          </button>
+
+          <button 
+            onClick={onManualPull}
+            disabled={syncStatus === 'syncing'}
+            className="group flex flex-col items-center justify-center gap-4 p-10 bg-white border-4 border-blue-600 text-blue-600 hover:bg-blue-50 rounded-[2rem] shadow-2xl shadow-blue-50 transition-all active:scale-95 disabled:opacity-50"
+          >
+            <div className="p-4 bg-blue-100 rounded-2xl group-hover:scale-110 transition-transform">
+              <DownloadCloud size={32} />
+            </div>
+            <div className="text-center">
+              <p className="font-black text-sm uppercase tracking-[0.2em]">BUSCAR DA NUVEM</p>
+              <p className="text-[10px] opacity-70 font-bold mt-1">Baixa os dados salvos na internet</p>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* Status da Conexão */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`w-3 h-3 rounded-full ${
+            syncStatus === 'synced' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 
+            syncStatus === 'syncing' ? 'bg-blue-500 animate-pulse' :
+            syncStatus === 'error' ? 'bg-red-500' : 'bg-gray-300'
+          }`} />
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+            STATUS: {
+              syncStatus === 'synced' ? 'Nuvem Conectada e Sincronizada' : 
+              syncStatus === 'syncing' ? 'Processando... Aguarde' :
+              syncStatus === 'error' ? 'Erro de Conexão' : 'Aguardando Código'
+            }
+          </span>
+        </div>
+        {syncStatus === 'syncing' && <RefreshCw size={16} className="text-blue-500 animate-spin" />}
+      </div>
+
+      {/* Guia Rápido */}
+      <div className="p-6 bg-amber-50 rounded-2xl border border-amber-100 space-y-3">
+        <h4 className="text-[10px] font-black text-amber-900 uppercase tracking-widest flex items-center gap-2">
+          <AlertTriangle size={14} /> Importante para o sucesso:
+        </h4>
+        <ul className="text-[11px] font-bold text-amber-800/80 space-y-2 leading-tight">
+          <li>1. No Computador: Digite o código e clique em <strong>SALVAR NA NUVEM</strong>.</li>
+          <li>2. No Celular: Digite o MESMO código e clique em <strong>BUSCAR DA NUVEM</strong>.</li>
+          <li>3. Repita o processo sempre que quiser atualizar os dados entre um e outro.</li>
+        </ul>
       </div>
     </div>
   );

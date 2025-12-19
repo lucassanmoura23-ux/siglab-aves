@@ -1,10 +1,11 @@
 
 /**
- * Serviço de Sincronização em Nuvem SIGLAB
- * Utiliza o kvdb.io para persistência remota baseada em chaves.
+ * Serviço de Sincronização em Nuvem SIGLAB v3
+ * Utiliza um canal de dados otimizado para sincronização multiplataforma.
  */
 
-const BUCKET_ID = 'siglab_aviario_prod_sync_v2'; 
+// Usamos um bucket fixo para a aplicação e chaves dinâmicas para cada usuário
+const BUCKET_ID = 'siglab_aviario_cloud_v3'; 
 const BASE_URL = `https://kvdb.io/${BUCKET_ID}`;
 
 export interface CloudData {
@@ -14,10 +15,10 @@ export interface CloudData {
 }
 
 export const pushToCloud = async (key: string, data: Omit<CloudData, 'updatedAt'>): Promise<boolean> => {
-  if (!key || key.length < 4) return false;
+  if (!key || key.length < 2) return false;
   
-  // Limpar a chave para evitar caracteres inválidos na URL
-  const sanitizedKey = key.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  // Normaliza a chave para evitar problemas de URL
+  const sanitizedKey = key.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
 
   try {
     const payload: CloudData = {
@@ -35,27 +36,32 @@ export const pushToCloud = async (key: string, data: Omit<CloudData, 'updatedAt'
 
     return response.ok;
   } catch (error) {
-    console.error("Erro ao enviar dados para nuvem:", error);
+    console.error("Erro ao salvar na nuvem:", error);
     return false;
   }
 };
 
 export const fetchFromCloud = async (key: string): Promise<CloudData | null> => {
-  if (!key || key.length < 4) return null;
+  if (!key || key.length < 2) return null;
   
-  const sanitizedKey = key.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  const sanitizedKey = key.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
 
   try {
-    const response = await fetch(`${BASE_URL}/${sanitizedKey}`);
+    const response = await fetch(`${BASE_URL}/${sanitizedKey}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      },
+      cache: 'no-store'
+    });
     
-    if (response.status === 404) return null; // Ainda não existem dados para esta chave
-    
+    if (response.status === 404) return null;
     if (!response.ok) throw new Error("Falha na rede");
     
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error("Erro ao buscar dados da nuvem:", error);
+    console.error("Erro ao buscar da nuvem:", error);
     return null;
   }
 };
