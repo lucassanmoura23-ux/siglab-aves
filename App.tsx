@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ProductionForm } from './components/ProductionForm';
 import { DailyRecords } from './components/DailyRecords';
@@ -9,101 +9,35 @@ import { AviaryDashboard } from './components/AviaryDashboard';
 import { GeneralDashboard } from './components/GeneralDashboard';
 import { AIReports } from './components/AIReports';
 import { LandingPage } from './components/LandingPage';
-import { SyncManager } from './components/SyncManager';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
-import { LayoutGrid, Menu, X, Cloud, CloudOff, RefreshCw, CheckCircle2, Wifi, WifiOff } from 'lucide-react';
-import { pushToCloud, fetchFromCloud } from './services/cloudSyncService';
+import { Menu } from 'lucide-react';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   
-  const [cloudKey, setCloudKey] = useState<string>(() => {
-    return localStorage.getItem('siglab_cloud_key') || '';
-  });
-
   const [records, setRecords] = useState<ProductionRecord[]>(() => {
     const saved = localStorage.getItem('siglab_records');
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [editingRecord, setEditingRecord] = useState<ProductionRecord | null>(null);
+
   const [batchRecords, setBatchRecords] = useState<BatchRecord[]>(() => {
     const saved = localStorage.getItem('siglab_batch_records');
     return saved ? JSON.parse(saved) : [];
   });
-
-  const [editingRecord, setEditingRecord] = useState<ProductionRecord | null>(null);
+  
   const [editingBatch, setEditingBatch] = useState<BatchRecord | null>(null);
 
-  // --- Funções de Sincronização Manuais ---
-
-  const handleManualPush = useCallback(async () => {
-    if (!cloudKey || cloudKey.length < 2) {
-      alert("⚠️ Digite e SALVE um código primeiro!");
-      return;
-    }
-    setSyncStatus('syncing');
-    
-    // Pequeno delay para feedback visual
-    await new Promise(r => setTimeout(r, 500));
-    
-    const success = await pushToCloud(cloudKey, { records, batchRecords });
-    if (success) {
-      setSyncStatus('synced');
-      alert("✅ DADOS ENVIADOS!\n\nAgora você pode clicar em 'BUSCAR' no outro aparelho usando o mesmo código.");
-    } else {
-      setSyncStatus('error');
-      alert("❌ ERRO AO SALVAR\n\n1. Verifique se o código é simples (apenas letras e números).\n2. Verifique sua conexão com a internet.\n3. Se o erro persistir, tente um código diferente.");
-    }
-  }, [cloudKey, records, batchRecords]);
-
-  const handleManualPull = useCallback(async () => {
-    if (!cloudKey || cloudKey.length < 2) {
-      alert("⚠️ Digite e SALVE um código primeiro!");
-      return;
-    }
-    setSyncStatus('syncing');
-    
-    const cloudData = await fetchFromCloud(cloudKey);
-    if (cloudData) {
-      // Confirmação para não apagar dados locais sem querer
-      const confirmMsg = records.length > 0 
-        ? "Isso irá substituir os dados atuais deste aparelho pelos dados que estão na nuvem. Deseja continuar?"
-        : "Dados encontrados! Deseja baixar agora?";
-        
-      if (window.confirm(confirmMsg)) {
-        setRecords(cloudData.records);
-        setBatchRecords(cloudData.batchRecords);
-        setSyncStatus('synced');
-        alert("✅ DADOS RECUPERADOS COM SUCESSO!");
-      } else {
-        setSyncStatus('idle');
-      }
-    } else {
-      setSyncStatus('error');
-      alert("ℹ️ NENHUM DADO NA NUVEM\n\nNão encontramos nada para o código '" + cloudKey + "'. Certifique-se de que você clicou em SALVAR no outro aparelho primeiro.");
-    }
-  }, [cloudKey, records.length]);
-
-  // Persistência Local
   useEffect(() => {
     localStorage.setItem('siglab_records', JSON.stringify(records));
-    localStorage.setItem('siglab_batch_records', JSON.stringify(batchRecords));
-    localStorage.setItem('siglab_cloud_key', cloudKey);
-  }, [records, batchRecords, cloudKey]);
+  }, [records]);
 
-  // Verificação de conexão ao abrir
   useEffect(() => {
-    if (cloudKey && cloudKey.length >= 2) {
-      setSyncStatus('syncing');
-      fetchFromCloud(cloudKey).then(data => {
-        if (data) setSyncStatus('synced');
-        else setSyncStatus('idle');
-      }).catch(() => setSyncStatus('error'));
-    }
-  }, [cloudKey]);
+    localStorage.setItem('siglab_batch_records', JSON.stringify(batchRecords));
+  }, [batchRecords]);
 
   const syncProductionWithBatches = (currentProduction: ProductionRecord[], currentBatches: BatchRecord[]): ProductionRecord[] => {
     return currentProduction.map(prod => {
@@ -129,19 +63,6 @@ const App: React.FC = () => {
       setRecords(prev => [record, ...prev]);
     }
     setCurrentView('daily-records');
-  };
-
-  const handleSaveBatch = (record: BatchRecord) => {
-    let updatedBatches: BatchRecord[];
-    if (editingBatch) {
-      updatedBatches = batchRecords.map(r => r.id === record.id ? record : r);
-      setEditingBatch(null);
-    } else {
-      updatedBatches = [record, ...batchRecords];
-    }
-    setBatchRecords(updatedBatches);
-    setRecords(prev => syncProductionWithBatches(prev, updatedBatches));
-    setCurrentView('batch-characteristics');
   };
 
   const handleNavigate = (view: ViewState) => {
@@ -191,7 +112,7 @@ const App: React.FC = () => {
               setBatchRecords(updated);
               setRecords(prev => syncProductionWithBatches(prev, updated));
             }}
-            onDeleteAll={() => setBatchRecords([])}
+            onDeleteAll={() => { setBatchRecords([]); setRecords(prev => syncProductionWithBatches(prev, [])); }}
             onImportRecords={(recs) => {
               const updated = [...recs, ...batchRecords];
               setBatchRecords(updated);
@@ -203,31 +124,41 @@ const App: React.FC = () => {
         return (
           <BatchForm
             initialData={editingBatch}
-            onSave={handleSaveBatch}
-            onCancel={() => setCurrentView('batch-characteristics')}
+            onSave={(r) => {
+              let updatedBatches: BatchRecord[];
+              if (editingBatch) {
+                updatedBatches = batchRecords.map(old => old.id === r.id ? r : old);
+                setEditingBatch(null);
+              } else {
+                updatedBatches = [r, ...batchRecords];
+              }
+              setBatchRecords(updatedBatches);
+              setRecords(prev => syncProductionWithBatches(prev, updatedBatches));
+              setCurrentView('batch-characteristics');
+            }}
+            onCancel={() => { setEditingBatch(null); setCurrentView('batch-characteristics'); }}
           />
         );
       case 'aviary-details':
         return <AviaryDashboard records={records} />;
       case 'ai-reports':
         return <AIReports records={records} batchRecords={batchRecords} />;
-      case 'sync-devices':
-        return (
-          <SyncManager 
-            currentKey={cloudKey} 
-            onUpdateKey={setCloudKey} 
-            onManualPush={handleManualPush}
-            onManualPull={handleManualPull}
-            syncStatus={syncStatus}
-          />
-        );
       default:
         return <GeneralDashboard records={records} batchRecords={batchRecords} />;
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc]">
+    <div className="flex min-h-screen bg-[#f8fafc] overflow-x-hidden">
+      {/* Sidebar Overlay no Mobile */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-300"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar content */}
       <Sidebar 
         currentView={currentView} 
         onNavigate={handleNavigate} 
@@ -235,47 +166,39 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)} 
       />
       
-      <main className="flex-1 lg:ml-64 p-4 md:p-8 overflow-y-auto h-screen transition-all relative">
-        <div className="w-full max-w-[1400px] mx-auto pb-10">
-          
-          <div className="flex justify-between items-center mb-6 md:mb-10">
+      <main className={`flex-1 transition-all duration-300 lg:ml-64 w-full`}>
+        <div className="p-4 md:p-8 pt-6">
+          <header className="flex justify-between items-center mb-8 bg-white/50 p-2 rounded-2xl backdrop-blur-sm lg:bg-transparent lg:p-0">
             <div className="flex items-center gap-3">
-              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-xl transition-colors">
-                <Menu size={24} className="text-gray-600" />
+              {/* Botão Menu Mobile no Cabeçalho */}
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="lg:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+                aria-label="Menu"
+              >
+                <Menu size={24} />
               </button>
-              <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg">
-                   <svg viewBox="0 0 100 100" className="w-6 h-6 md:w-8 md:h-8" fill="white">
+              
+              <div className="flex items-center gap-2 group cursor-pointer" onClick={() => handleNavigate('dashboard')}>
+                <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg transition-transform group-hover:scale-105">
+                  <svg viewBox="0 0 100 100" className="w-6 h-6 md:w-8 md:h-8" fill="white">
                     <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" fill="white" />
                   </svg>
                 </div>
-                <h1 className="text-lg md:text-2xl font-black text-[#1e293b] tracking-tight uppercase">
+                <h1 className="text-lg md:text-xl font-black text-[#1e293b] tracking-tighter uppercase">
                   SIGLAB <span className="text-blue-600">AVIÁRIO</span>
                 </h1>
               </div>
             </div>
-
-            {/* Indicador de Status Centralizado */}
-            <div className="flex items-center gap-2">
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all shadow-sm ${
-                syncStatus === 'synced' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
-                syncStatus === 'syncing' ? 'bg-blue-50 border-blue-100 text-blue-600' :
-                syncStatus === 'error' ? 'bg-red-50 border-red-100 text-red-600' :
-                'bg-gray-50 border-gray-100 text-gray-400'
-              }`}>
-                {syncStatus === 'syncing' ? <RefreshCw size={12} className="animate-spin" /> : 
-                 syncStatus === 'synced' ? <Wifi size={12} /> : 
-                 syncStatus === 'error' ? <WifiOff size={12} /> : <Cloud size={12} />}
-                <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">
-                  {syncStatus === 'syncing' ? 'Conectando...' : 
-                   syncStatus === 'synced' ? 'Nuvem OK' : 
-                   syncStatus === 'error' ? 'Erro de Sincronia' : 'Offline'}
-                </span>
-              </div>
+            
+            <div className="hidden sm:block">
+               <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 uppercase tracking-widest">
+                v1.5.0 Premium
+              </span>
             </div>
-          </div>
+          </header>
 
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="max-w-7xl mx-auto">
             {renderContent()}
           </div>
         </div>
