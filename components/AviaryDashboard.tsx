@@ -80,6 +80,7 @@ export const AviaryDashboard: React.FC<{ records: ProductionRecord[] }> = ({ rec
 
     return (
       <div className="relative w-full h-full touch-none overflow-visible">
+        <div className="flex items-center gap-3 mb-6"><div className="w-2.5 h-6 bg-blue-600 rounded-full"></div><h3 className="text-[13px] font-black text-[#1e293b] uppercase tracking-tight">DESEMPENHO DE PRODUÇÃO MENSAL</h3></div>
         <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full overflow-visible">
           {[0, 0.5, 1].map(v => (<line key={v} x1={p} y1={getY(v * maxVal)} x2={w - p} y2={getY(v * maxVal)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />))}
           {['1', '2', '3', '4'].map(id => {
@@ -93,33 +94,14 @@ export const AviaryDashboard: React.FC<{ records: ProductionRecord[] }> = ({ rec
           {chartData.map((_, i) => (<rect key={i} x={getX(i) - 20} y={0} width="40" height={h} fill="transparent" className="cursor-pointer" onMouseEnter={() => setActiveLineIdx(i)} onMouseLeave={() => setActiveLineIdx(null)} />))}
         </svg>
 
-        {/* Tooltip Renderizado no Hover */}
         {activeLineIdx !== null && (
-          <div 
-            className="absolute top-0 bg-white/95 backdrop-blur-md shadow-xl border border-gray-100 p-3 rounded-xl text-[10px] z-20 pointer-events-none min-w-[150px] animate-in fade-in zoom-in-95 duration-200" 
-            style={{ 
-              left: activeLineIdx > 8 ? 'auto' : `${(getX(activeLineIdx)/w)*100}%`, 
-              right: activeLineIdx > 8 ? '0' : 'auto',
-              transform: activeLineIdx > 8 ? 'translateX(0)' : 'translateX(10px)'
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-gray-50">
-               <Calendar size={12} className="text-blue-500" />
-               <p className="font-black text-gray-800 uppercase tracking-tight">{monthsFull[activeLineIdx]}</p>
-            </div>
+          <div className="absolute top-10 bg-white/95 backdrop-blur-md shadow-xl border border-gray-100 p-3 rounded-xl text-[10px] z-20 pointer-events-none min-w-[150px] animate-in fade-in zoom-in-95 duration-200" style={{ left: activeLineIdx > 8 ? 'auto' : `${(getX(activeLineIdx)/w)*100}%`, right: activeLineIdx > 8 ? '0' : 'auto', transform: 'translateX(10px)' }}>
+            <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-gray-50"><Calendar size={12} className="text-blue-500" /><p className="font-black text-gray-800 uppercase tracking-tight">{monthsFull[activeLineIdx]}</p></div>
             <div className="space-y-1.5">
               {['1', '2', '3', '4'].map(id => {
                 if (aviaryFilter !== 'Todos Aviários' && aviaryFilter.replace(/\D/g, '') !== id) return null;
                 const val = chartData[activeLineIdx][id as '1'];
-                return (
-                  <div key={id} className="flex justify-between items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: aviaryColors[id].stroke }}></div>
-                      <span className="font-bold text-gray-500">Aviário {id}:</span>
-                    </div>
-                    <span className="font-black text-gray-900">{val.toLocaleString('pt-BR')}</span>
-                  </div>
-                );
+                return (<div key={id} className="flex justify-between items-center gap-4"><div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: aviaryColors[id].stroke }}></div><span className="font-bold text-gray-500">Aviário {id}:</span></div><span className="font-black text-gray-900">{val.toLocaleString('pt-BR')}</span></div>);
               })}
             </div>
           </div>
@@ -133,7 +115,7 @@ export const AviaryDashboard: React.FC<{ records: ProductionRecord[] }> = ({ rec
       <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex flex-wrap gap-2">
         <select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)} className="bg-gray-50 border border-gray-100 p-2 rounded-lg text-xs font-bold uppercase outline-none flex-1"><option>Todo o Período</option></select>
         <select value={aviaryFilter} onChange={e => setAviaryFilter(e.target.value)} className="bg-gray-50 border border-gray-100 p-2 rounded-lg text-xs font-bold uppercase outline-none flex-1"><option>Todos Aviários</option><option>Aviário 1</option><option>Aviário 2</option><option>Aviário 3</option><option>Aviário 4</option></select>
-        <button onClick={() => {setAviaryFilter('Todos Aviários'); setYearFilter('-- Por Ano --');}} className="text-[10px] font-black text-blue-600 uppercase">Limpar Filtros</button>
+        <button onClick={() => {setAviaryFilter('Todos Aviários');}} className="text-[10px] font-black text-blue-600 uppercase">Limpar Filtros</button>
       </div>
       <div className="flex justify-between items-center px-1"><h2 className="text-lg font-black text-[#1e293b] uppercase tracking-tight">Análise Individual de Aviários</h2><button className="bg-emerald-500 text-white p-2 rounded-lg shadow-sm"><Download size={16} /></button></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -147,15 +129,12 @@ export const AviaryDashboard: React.FC<{ records: ProductionRecord[] }> = ({ rec
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div className="flex items-center justify-between mb-8"><h3 className="text-sm font-black text-gray-800 uppercase tracking-tight flex items-center gap-2"><div className="w-2 h-4 bg-blue-500 rounded-full"></div> Produção Mensal (Ovos)</h3></div><div className="h-64 w-full">{renderLineChart()}</div></div>
-        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div className="flex items-center justify-between mb-8"><h3 className="text-sm font-black text-gray-800 uppercase tracking-tight flex items-center gap-2"><div className="w-2 h-4 bg-emerald-500 rounded-full"></div> Taxa de Postura Média (%)</h3></div><div className="h-64 flex items-end justify-around border-b border-gray-100 pb-2 relative">
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div className="h-72 w-full">{renderLineChart()}</div></div>
+        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden"><div className="flex items-center gap-3 mb-8"><div className="w-2.5 h-6 bg-emerald-600 rounded-full"></div><h3 className="text-[13px] font-black text-[#1e293b] uppercase tracking-tight">TAXA DE POSTURA MÉDIA (%)</h3></div><div className="h-64 flex items-end justify-around border-b border-gray-100 pb-2 relative">
             {stats.map((av: any) => (
               <div key={av.id} className="flex flex-col items-center w-full relative group cursor-pointer" onClick={() => setActiveBarId(activeBarId === av.id ? null : av.id)}>
                 <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-900 text-white text-[9px] p-1.5 rounded font-black whitespace-nowrap z-10">{av.layingRate.toFixed(1)}%</div>
-                <div 
-                  className={`w-8 md:w-12 rounded-t-lg bg-gradient-to-b ${aviaryColors[av.id].gradientFrom} ${aviaryColors[av.id].gradientTo} shadow-lg shadow-gray-100 animate-grow-v`} 
-                  style={{ height: `${Math.max(2, Math.min(100, av.layingRate) * 1.5)}px` }} 
-                />
+                <div className={`w-8 md:w-12 rounded-t-lg bg-gradient-to-b ${aviaryColors[av.id].gradientFrom} ${aviaryColors[av.id].gradientTo} shadow-lg shadow-gray-100 animate-grow-v`} style={{ height: `${Math.max(2, Math.min(100, av.layingRate) * 1.5)}px` }} />
                 <span className="text-[10px] font-black text-gray-400 mt-2 uppercase tracking-tighter">AV. {av.id}</span>
               </div>
             ))}
@@ -168,5 +147,3 @@ export const AviaryDashboard: React.FC<{ records: ProductionRecord[] }> = ({ rec
 const QualityItem = ({ label, value, total, color }: any) => (
   <div className="flex justify-between items-center text-[10px]"><div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${color}`} /><span className="font-bold text-gray-600">{label}</span></div><div className="text-right"><span className="font-black text-gray-800">{value.toLocaleString('pt-BR')}</span><span className="text-gray-400 ml-1 text-[9px]">({total > 0 ? ((value/total)*100).toFixed(1) : '0.0'}%)</span></div></div>
 );
-
-interface AviaryDashboardProps { records: ProductionRecord[]; }

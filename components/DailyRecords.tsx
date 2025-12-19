@@ -80,7 +80,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
 
   const filteredRecords = useMemo(() => {
     return records.filter(record => {
-      if (!record.date) return false;
+      if (!record.date || !record.date.includes('-')) return false;
       const [rYearStr, rMonthStr, rDayStr] = record.date.split('-');
       const rMonth = parseInt(rMonthStr);
       const rDay = parseInt(rDayStr);
@@ -110,8 +110,8 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
 
       return true;
     }).sort((a, b) => {
-      // Ordenação cronológica estrita (mais recente primeiro)
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
+      // Ordenação cronológica rigorosa baseada no tempo
+      return new Date(b.date + 'T00:00:00').getTime() - new Date(a.date + 'T00:00:00').getTime();
     });
   }, [records, searchTerm, periodFilter, yearFilter, fortnightFilter, aviaryFilter]);
 
@@ -160,19 +160,21 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
         let separator = header.includes(';') ? ';' : ',';
         const headerCols = lines[0].split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
         
-        // Verifica se existe uma coluna de ID no início
-        const hasIdAtStart = headerCols[0] === 'id' || headerCols[0].includes('uuid');
-        const dataIndex = hasIdAtStart ? 1 : 0;
-
+        // Verifica se a primeira coluna é um UUID ou apenas o texto 'id'
+        const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
-          
           const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
           
-          // Mapeamento dinâmico baseado no índice de data encontrado
+          // Lógica inteligente de detecção: se a col 0 é UUID, a data está na 1.
+          let dataIndex = 0;
+          if (isUUID(cols[0]) || headerCols[0] === 'id') {
+            dataIndex = 1;
+          }
+
           const date = cols[dataIndex];
-          // Validação básica de data (padrão ISO YYYY-MM-DD)
           if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
 
           const aviaryId = (cols[dataIndex + 1] || '1').replace(/\D/g, '');
@@ -211,11 +213,11 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
         }
         if (newRecords.length > 0) {
           onImportRecords(newRecords);
-          alert(`${newRecords.length} registros sincronizados com sucesso.`);
+          alert(`${newRecords.length} registros sincronizados.`);
         } else {
-          alert("Nenhum dado válido encontrado. Verifique o formato do arquivo.");
+          alert("Não foi possível identificar dados válidos no CSV.");
         }
-      } catch (err) { alert("Erro crítico ao processar CSV."); }
+      } catch (err) { alert("Erro ao importar CSV."); }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -225,7 +227,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
     <div className="space-y-6">
       <input 
         type="file" 
-        accept=".csv,text/csv" 
+        accept=".csv, application/vnd.ms-excel, text/csv" 
         ref={fileInputRef} 
         onChange={handleFileChange} 
         className="hidden" 
