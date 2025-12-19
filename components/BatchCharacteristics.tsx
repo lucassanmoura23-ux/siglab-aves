@@ -112,12 +112,21 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
         if (lines.length < 2) return;
 
         const newRecords: BatchRecord[] = [];
-        const header = lines[0].toLowerCase();
-        let separator = header.includes(';') ? ';' : ',';
-        const headerCols = lines[0].split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
-        
-        // Verifica se existe ID para pular coluna
-        const dataIndex = (headerCols[0] === 'id' || headerCols[0].includes('uuid')) ? 1 : 0;
+        const firstLine = lines[0].toLowerCase();
+        let separator = firstLine.includes(';') ? ';' : ',';
+        if (!firstLine.includes(';') && !firstLine.includes(',') && firstLine.includes('\t')) separator = '\t';
+
+        const parseDateFlexible = (dateStr: string) => {
+          if (!dateStr) return null;
+          // YYYY-MM-DD
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+          // DD/MM/YYYY
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+            const [d, m, y] = dateStr.split('/');
+            return `${y}-${m}-${d}`;
+          }
+          return null;
+        };
 
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
@@ -125,28 +134,43 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
           
           const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
           
-          const date = cols[dataIndex];
-          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+          // Busca a data nas primeiras colunas (flexibilidade para IDs extras)
+          let date = null;
+          let dateColIndex = -1;
+
+          for (let j = 0; j < Math.min(cols.length, 3); j++) {
+            const potentialDate = parseDateFlexible(cols[j]);
+            if (potentialDate) {
+              date = potentialDate;
+              dateColIndex = j;
+              break;
+            }
+          }
+
+          if (!date) continue;
 
           newRecords.push({
             id: crypto.randomUUID(),
             date: date,
-            aviaryId: (cols[dataIndex + 1] || '1').replace(/\D/g, ''),
-            batchId: cols[dataIndex + 2] || 'S/L',
-            ageWeeks: Number(cols[dataIndex + 3]) || 0,
+            aviaryId: (cols[dateColIndex + 1] || '1').replace(/\D/g, ''),
+            batchId: cols[dateColIndex + 2] || 'S/L',
+            ageWeeks: Number(cols[dateColIndex + 3]) || 0,
             currentBirds: 0,
-            weight: Number(cols[dataIndex + 4]) || 0,
-            uniformity: Number(cols[dataIndex + 5]) || 0,
-            feathering: (cols[dataIndex + 6] || 'Bom') as any,
+            weight: Number(cols[dateColIndex + 4]) || 0,
+            uniformity: Number(cols[dateColIndex + 5]) || 0,
+            feathering: (cols[dateColIndex + 6] || 'Bom') as any,
           });
         }
+        
         if (newRecords.length > 0) {
           onImportRecords(newRecords);
-          alert(`${newRecords.length} lotes importados.`);
+          alert(`${newRecords.length} registros de lote importados com sucesso!`);
         } else {
-          alert("Arquivo sem dados de lote válidos.");
+          alert("Arquivo sem dados de lote válidos. Verifique se as datas estão como DD/MM/AAAA ou AAAA-MM-DD.");
         }
-      } catch (err) { alert("Erro ao sincronizar lotes."); }
+      } catch (err) { 
+        alert("Erro ao ler o arquivo. Certifique-se que é um CSV válido."); 
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -156,7 +180,7 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
     <div className="space-y-6 animate-in fade-in duration-500">
       <input 
         type="file" 
-        accept=".csv,text/csv" 
+        accept=".csv, text/csv, .txt, application/vnd.ms-excel" 
         ref={fileInputRef} 
         onChange={handleFileChange} 
         className="hidden" 
