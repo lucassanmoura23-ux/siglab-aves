@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { X, Save, Link as LinkIcon, AlertCircle } from 'lucide-react';
 import { ProductionFormData, ProductionMetrics, ProductionRecord, BatchRecord } from '../types';
@@ -36,7 +37,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
   // Initialize state with initialData if provided, otherwise default values
   const [formData, setFormData] = useState<ProductionFormData>(() => {
     if (initialData) {
-      // We explicitly copy fields to avoid reference issues, although initialData spread is usually fine
       return {
         date: initialData.date,
         aviaryId: initialData.aviaryId,
@@ -56,23 +56,22 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
   });
 
   // Auto-fetch Batch ID based on Date and Aviary
+  // REMOVED: if (initialData) return; -> Now updates even when editing
   useEffect(() => {
-    if (initialData) return; // Don't override if editing an existing record
-
-    const selectedDate = new Date(formData.date);
+    const selectedDate = formData.date;
     
     // Find the latest batch for this aviary that started on or before the selected date
     const activeBatch = batchRecords
       .filter(b => b.aviaryId === formData.aviaryId)
-      .filter(b => new Date(b.date) <= selectedDate)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      .filter(b => b.date <= selectedDate)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
 
     setFormData(prev => ({
       ...prev,
-      batchId: activeBatch ? activeBatch.batchId : 'N/D' // 'N/D' if no batch found
+      batchId: activeBatch ? activeBatch.batchId : 'N/D'
     }));
 
-  }, [formData.date, formData.aviaryId, batchRecords, initialData]);
+  }, [formData.date, formData.aviaryId, batchRecords]);
 
   // Check if current aviary supports floor eggs (Aviary 2 and 4)
   const hasFloorEggs = ['2', '4'].includes(formData.aviaryId);
@@ -82,13 +81,11 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
     const clean = Number(formData.cleanEggs) || 0;
     const dirty = Number(formData.dirtyEggs) || 0;
     const cracked = Number(formData.crackedEggs) || 0;
-    // Only count floor eggs if applicable to the aviary
     const floor = hasFloorEggs ? (Number(formData.floorEggs) || 0) : 0;
     const birds = Number(formData.liveBirds) || 0;
 
     const totalEggs = clean + dirty + cracked + floor;
     
-    // Avoid division by zero
     const calculatePercentage = (val: number, total: number) => 
       total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
 
@@ -107,7 +104,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     
-    // Handle number inputs to ensure they don't store NaN
     if (type === 'number') {
       setFormData(prev => ({
         ...prev,
@@ -116,8 +112,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
     } else {
       setFormData(prev => {
         const newData = { ...prev, [name]: value };
-        
-        // Reset floor eggs if switching to an aviary that doesn't support them
         if (name === 'aviaryId') {
           if (!['2', '4'].includes(value)) {
             newData.floorEggs = 0;
@@ -129,13 +123,11 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
   };
 
   const handleSubmit = () => {
-    // Basic validation
     if (metrics.totalEggs === 0 && formData.liveBirds === 0) {
       alert("Por favor, preencha os dados de produção.");
       return;
     }
 
-    // STRICT VALIDATION: Block if no batch is found
     if (formData.batchId === 'N/D' || !formData.batchId) {
         alert("Bloqueio de Sistema:\n\nNão é possível salvar este registro pois não foi encontrado nenhum lote ativo para este Aviário nesta Data.\n\nPor favor, vá em 'Caracterização de Lotes' e cadastre o lote antes de lançar a produção.");
         return;
@@ -143,7 +135,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
 
     const record: ProductionRecord = {
       ...formData,
-      // If editing, keep original ID and createdAt, otherwise generate new
       id: initialData?.id || crypto.randomUUID(),
       createdAt: initialData?.createdAt || new Date().toISOString(),
       metrics: metrics
@@ -217,9 +208,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
                 <option value="3">Aviário 3</option>
                 <option value="4">Aviário 4</option>
               </select>
-              <p className="text-[10px] text-gray-400 truncate">
-                {['1', '3'].includes(formData.aviaryId) ? 'Sistema convencional' : 'Sistema com ovos de cama'}
-              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -250,8 +238,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
         <section className={`space-y-4 pt-4 border-t border-gray-50 ${isBatchMissing ? 'opacity-50 pointer-events-none' : ''}`}>
           <h3 className="text-blue-700 font-semibold text-lg">2. Produção do Dia</h3>
           <div className="flex flex-col md:flex-row gap-6 items-end">
-            
-            {/* Dynamic Grid: 3 columns normally, 4 columns if Floor Eggs are shown */}
             <div className={`grid grid-cols-1 md:grid-cols-${hasFloorEggs ? '4' : '3'} gap-6 flex-1 transition-all`}>
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-green-600 uppercase">Ovos Limpos</label>
@@ -286,8 +272,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
                   className="w-full px-3 py-2.5 border border-red-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
                 />
               </div>
-
-              {/* Conditional Floor Eggs Input */}
               {hasFloorEggs && (
                 <div className="space-y-1.5 animate-in fade-in slide-in-from-left-4 duration-300">
                   <label className="block text-xs font-semibold text-yellow-600 uppercase">Ovos de Cama</label>
@@ -302,8 +286,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
                 </div>
               )}
             </div>
-
-            {/* Total Box */}
             <div className="w-full md:w-48 bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col items-center justify-center">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Ovos</span>
               <span className="text-3xl font-bold text-gray-900">{metrics.totalEggs.toLocaleString()}</span>
@@ -314,7 +296,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
         {/* Section 3: Indicators */}
         <section className={`space-y-4 pt-4 border-t border-gray-50 ${isBatchMissing ? 'opacity-50 pointer-events-none' : ''}`}>
           <h3 className="text-blue-700 font-semibold text-lg">3. Indicadores (Automático)</h3>
-          {/* Responsive Grid: Adjusts columns based on available items */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="p-4 bg-green-50 rounded-lg border border-green-100">
               <div className="text-xs font-medium text-green-800 uppercase mb-1">Limpos</div>
@@ -328,19 +309,14 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
               <div className="text-xs font-medium text-green-800 uppercase mb-1">Trincados</div>
               <div className="text-2xl font-bold text-green-700">{metrics.crackedPercentage}%</div>
             </div>
-            
-            {/* Conditional Floor Eggs Indicator */}
             {hasFloorEggs ? (
                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 animate-in fade-in zoom-in duration-300">
                 <div className="text-xs font-medium text-yellow-800 uppercase mb-1">Cama</div>
                 <div className="text-2xl font-bold text-yellow-700">{metrics.floorPercentage}%</div>
               </div>
             ) : (
-              // Spacer/Placeholder to keep layout consistent if needed, or just let grid handle it
-              // Using hidden on small screens to let grid flow naturally
               <div className="hidden md:block p-4 border border-transparent"></div>
             )}
-
             <div className="p-4 bg-red-50 rounded-lg border border-red-100">
               <div className="text-xs font-medium text-red-800 uppercase mb-1">Taxa Postura</div>
               <div className="text-2xl font-bold text-red-700">{metrics.layingRate}%</div>
@@ -348,7 +324,7 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
           </div>
         </section>
 
-        {/* Section 4: Management */}
+        {/* Section 4: Manejo */}
         <section className={`space-y-4 pt-4 border-t border-gray-50 ${isBatchMissing ? 'opacity-50 pointer-events-none' : ''}`}>
           <h3 className="text-blue-700 font-semibold text-lg">4. Manejo</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -386,7 +362,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
               />
             </div>
           </div>
-
           <div className="space-y-1.5 pt-2">
             <label className="block text-xs font-semibold text-gray-500 uppercase">Observação (Facultativo)</label>
             <textarea
@@ -394,13 +369,12 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
               value={formData.notes}
               onChange={handleChange}
               rows={3}
-              placeholder="Digite aqui ocorrências relevantes (ex: falta de energia, troca de ração, vacinação, clima extremo...)"
+              placeholder="Digite aqui ocorrências relevantes..."
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
             />
           </div>
         </section>
 
-        {/* Action Buttons */}
         <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
           <button 
             onClick={onCancel}
@@ -411,7 +385,6 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
           <button 
             onClick={handleSubmit}
             disabled={isBatchMissing}
-            title={isBatchMissing ? "Cadastre o lote primeiro" : "Salvar registro"}
             className={`px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors ${
               isBatchMissing 
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
