@@ -13,8 +13,7 @@ import {
   Bird,
   FileDown,
   ChevronDown,
-  Filter as FilterIcon,
-  MoreVertical
+  Filter as FilterIcon
 } from 'lucide-react';
 import { ProductionRecord, BatchRecord } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -57,22 +56,26 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
   }, [records]);
 
   const fortnightOptions = useMemo(() => {
-    const options: { label: string, value: string }[] = [];
     const uniquePeriods = new Set<string>();
-
     records.forEach(r => {
       if (!r.date || !r.date.includes('-')) return;
       const [y, m] = r.date.split('-');
       uniquePeriods.add(`${y}-${parseInt(m) - 1}`);
     });
 
-    const sorted = Array.from(uniquePeriods).sort((a, b) => b.localeCompare(a));
+    // Ordenação Cronológica (Mais recente para o mais antigo)
+    const sorted = Array.from(uniquePeriods).sort((a, b) => {
+      const [yA, mA] = a.split('-').map(Number);
+      const [yB, mB] = b.split('-').map(Number);
+      return (yB * 12 + mB) - (yA * 12 + mA);
+    });
 
+    const options: { label: string, value: string }[] = [];
     sorted.forEach(p => {
       const [year, monthIdx] = p.split('-');
       const mIdx = parseInt(monthIdx);
-      options.push({ label: `${MONTHS_SHORT[mIdx]}/${year} - 1ª Quinzena`, value: `${year}-${mIdx}-1` });
       options.push({ label: `${MONTHS_SHORT[mIdx]}/${year} - 2ª Quinzena`, value: `${year}-${mIdx}-2` });
+      options.push({ label: `${MONTHS_SHORT[mIdx]}/${year} - 1ª Quinzena`, value: `${year}-${mIdx}-1` });
     });
 
     return options;
@@ -153,46 +156,29 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
       try {
         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
         if (lines.length < 2) return;
-
         const newRecords: ProductionRecord[] = [];
-        
-        // Detecção de separador (Tenta ponto-e-vírgula primeiro, comum no Brasil)
         const firstLine = lines[0];
         let separator = firstLine.includes(';') ? ';' : ',';
-        if (!firstLine.includes(';') && !firstLine.includes(',') && firstLine.includes('\t')) separator = '\t';
-
         const parseDateFlexible = (dateStr: string) => {
           if (!dateStr) return null;
-          // Caso YYYY-MM-DD
           if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-          // Caso DD/MM/YYYY
           if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
             const [d, m, y] = dateStr.split('/');
             return `${y}-${m}-${d}`;
           }
           return null;
         };
-
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
           const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
-          
-          // Busca a coluna da data (pode ser a 0 ou a 1 se houver ID)
           let date = null;
           let dateColIndex = -1;
-
           for (let j = 0; j < Math.min(cols.length, 3); j++) {
             const potentialDate = parseDateFlexible(cols[j]);
-            if (potentialDate) {
-              date = potentialDate;
-              dateColIndex = j;
-              break;
-            }
+            if (potentialDate) { date = potentialDate; dateColIndex = j; break; }
           }
-
           if (!date) continue;
-
           const aviaryId = (cols[dateColIndex + 1] || '1').replace(/\D/g, '');
           const batchId = cols[dateColIndex + 2] || '-';
           const birds = Number(cols[dateColIndex + 3]) || 0;
@@ -201,40 +187,15 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
           const cracked = Number(cols[dateColIndex + 6]) || 0;
           const floor = Number(cols[dateColIndex + 7]) || 0;
           const total = clean + dirty + cracked + floor;
-          
           newRecords.push({
-            id: crypto.randomUUID(), 
-            date: date, 
-            aviaryId: aviaryId, 
-            batchId: batchId, 
-            liveBirds: birds, 
-            cleanEggs: clean, 
-            dirtyEggs: dirty, 
-            crackedEggs: cracked, 
-            floorEggs: floor, 
-            eggWeightAvg: Number(cols[dateColIndex + 8]) || 0, 
-            birdWeightAvg: Number(cols[dateColIndex + 9]) || 0, 
-            mortality: Number(cols[dateColIndex + 10]) || 0, 
-            notes: cols[dateColIndex + 11] || '', 
-            createdAt: new Date().toISOString(),
+            id: crypto.randomUUID(), date: date, aviaryId: aviaryId, batchId: batchId, liveBirds: birds, cleanEggs: clean, dirtyEggs: dirty, crackedEggs: cracked, floorEggs: floor, eggWeightAvg: Number(cols[dateColIndex + 8]) || 0, birdWeightAvg: Number(cols[dateColIndex + 9]) || 0, mortality: Number(cols[dateColIndex + 10]) || 0, notes: cols[dateColIndex + 11] || '', createdAt: new Date().toISOString(),
             metrics: {
-                totalEggs: total, 
-                cleanPercentage: total > 0 ? (clean / total) * 100 : 0, 
-                dirtyPercentage: total > 0 ? (dirty / total) * 100 : 0, 
-                crackedPercentage: total > 0 ? (cracked / total) * 100 : 0, 
-                floorPercentage: total > 0 ? (floor / total) * 100 : 0, 
-                layingRate: birds > 0 ? Number(((total / birds) * 100).toFixed(1)) : 0
+                totalEggs: total, cleanPercentage: total > 0 ? (clean / total) * 100 : 0, dirtyPercentage: total > 0 ? (dirty / total) * 100 : 0, crackedPercentage: total > 0 ? (cracked / total) * 100 : 0, floorPercentage: total > 0 ? (floor / total) * 100 : 0, layingRate: birds > 0 ? Number(((total / birds) * 100).toFixed(1)) : 0
             }
           });
         }
-        
-        if (newRecords.length > 0) {
-          onImportRecords(newRecords);
-          alert(`${newRecords.length} registros importados com sucesso!`);
-        } else {
-          alert("Nenhum dado válido encontrado. Certifique-se que as datas estão no formato DD/MM/AAAA ou AAAA-MM-DD.");
-        }
-      } catch (err) { alert("Erro ao processar o arquivo. Verifique se é um CSV válido."); }
+        if (newRecords.length > 0) { onImportRecords(newRecords); alert(`${newRecords.length} registros importados.`); }
+      } catch (err) { alert("Erro ao processar o arquivo."); }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -242,28 +203,18 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
 
   return (
     <div className="space-y-6">
-      <input 
-        type="file" 
-        accept=".csv, text/csv, .txt, application/vnd.ms-excel" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        className="hidden" 
-      />
+      <input type="file" accept=".csv, text/csv, .txt, application/vnd.ms-excel" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={() => modalType === 'single' ? (selectedRecordId && onDeleteRecord(selectedRecordId)) : onDeleteAll()} message={modalType === 'all' ? "Deseja apagar todos os registros permanentemente?" : "Deseja apagar este registro?"} />
       
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 text-gray-500 text-[10px] font-black uppercase tracking-widest">
-           <FilterIcon size={14} /> Filtros:
-        </div>
+        <div className="flex items-center gap-2 text-gray-500 text-[10px] font-black uppercase tracking-widest"><FilterIcon size={14} /> Filtros:</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
           <FilterSelect value={periodFilter} onChange={setPeriodFilter} options={['Todo o Período', 'Últimos 7 dias', 'Últimos 30 dias']} />
           <FilterSelect value={yearFilter} onChange={setYearFilter} options={yearOptions} />
           <FilterSelect value={fortnightFilter} onChange={setFortnightFilter} options={['-- Por Quinzena --', ...fortnightOptions.map(o => o.value)]} customLabels={fortnightOptions} />
           <FilterSelect value={aviaryFilter} onChange={setAviaryFilter} options={['Todos os Aviários', 'Aviário 1', 'Aviário 2', 'Aviário 3', 'Aviário 4']} />
         </div>
-        <div className="flex justify-end">
-          <button onClick={clearFilters} className="text-[10px] font-black text-blue-600 uppercase hover:underline tracking-widest">Limpar Filtros</button>
-        </div>
+        <div className="flex justify-end"><button onClick={clearFilters} className="text-[10px] font-black text-blue-600 uppercase hover:underline tracking-widest">Limpar Filtros</button></div>
       </div>
 
       <div className="flex flex-col gap-4">
@@ -300,17 +251,9 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
               <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-4 text-[11px] font-bold text-gray-500 whitespace-nowrap">{formatDate(record.date)}</td>
                 <td className="px-4 py-4 text-[11px] font-bold text-gray-900 whitespace-nowrap">Aviário {record.aviaryId}</td>
-                <td className="px-4 py-4">
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-black uppercase tracking-tighter">
-                    {record.batchId}
-                  </span>
-                </td>
+                <td className="px-4 py-4"><span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-black uppercase tracking-tighter">{record.batchId}</span></td>
                 <td className="px-4 py-4 text-center text-xs font-black text-gray-800">{record.metrics.totalEggs.toLocaleString()}</td>
-                <td className="px-4 py-4 text-center">
-                  <span className={`text-[11px] font-black ${record.metrics.layingRate > 90 ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {record.metrics.layingRate}%
-                  </span>
-                </td>
+                <td className="px-4 py-4 text-center"><span className={`text-[11px] font-black ${record.metrics.layingRate > 90 ? 'text-emerald-600' : 'text-red-500'}`}>{record.metrics.layingRate}%</span></td>
                 <td className="px-4 py-4 text-center text-[11px] font-bold text-emerald-600">{record.metrics.cleanPercentage.toFixed(1)}%</td>
                 <td className="px-4 py-4 text-center text-[11px] font-bold text-orange-500">{record.metrics.dirtyPercentage.toFixed(1)}%</td>
                 <td className="px-4 py-4 text-center text-[11px] font-bold text-red-500">{record.metrics.crackedPercentage.toFixed(1)}%</td>
@@ -324,9 +267,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
                 </td>
               </tr>
             )) : (
-              <tr>
-                <td colSpan={11} className="px-6 py-20 text-center text-gray-400 uppercase font-black text-[10px] tracking-widest">Sem registros</td>
-              </tr>
+              <tr><td colSpan={11} className="px-6 py-20 text-center text-gray-400 uppercase font-black text-[10px] tracking-widest">Sem registros</td></tr>
             )}
           </tbody>
         </table>
@@ -346,18 +287,10 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
                 <button onClick={() => { setSelectedRecordId(record.id); setModalType('single'); setIsModalOpen(true); }} className="p-2 text-red-500 bg-red-50 rounded-lg"><Trash2 size={16}/></button>
               </div>
             </div>
-            
             <div className="grid grid-cols-2 gap-4 border-t border-gray-50 pt-4">
-              <div>
-                <div className="text-[8px] font-black text-gray-400 uppercase">Total Ovos</div>
-                <div className="text-sm font-black text-gray-800">{record.metrics.totalEggs.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-[8px] font-black text-gray-400 uppercase">Taxa Postura</div>
-                <div className={`text-sm font-black ${record.metrics.layingRate > 90 ? 'text-emerald-600' : 'text-red-500'}`}>{record.metrics.layingRate}%</div>
-              </div>
+              <div><div className="text-[8px] font-black text-gray-400 uppercase">Total Ovos</div><div className="text-sm font-black text-gray-800">{record.metrics.totalEggs.toLocaleString()}</div></div>
+              <div><div className="text-[8px] font-black text-gray-400 uppercase">Taxa Postura</div><div className={`text-sm font-black ${record.metrics.layingRate > 90 ? 'text-emerald-600' : 'text-red-500'}`}>{record.metrics.layingRate}%</div></div>
             </div>
-
             <div className="grid grid-cols-4 gap-2 text-center text-[9px] font-bold bg-gray-50 p-2 rounded-xl">
               <div><span className="block text-emerald-600">LIMP</span>{record.metrics.cleanPercentage.toFixed(0)}%</div>
               <div><span className="block text-orange-600">SUJO</span>{record.metrics.dirtyPercentage.toFixed(0)}%</div>
@@ -366,9 +299,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
             </div>
           </div>
         )) : (
-          <div className="px-6 py-20 text-center bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400 uppercase font-black text-[10px]">
-            Nenhum registro encontrado
-          </div>
+          <div className="px-6 py-20 text-center bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400 uppercase font-black text-[10px]">Nenhum registro encontrado</div>
         )}
       </div>
     </div>
@@ -377,14 +308,8 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
 
 const FilterSelect = ({ value, onChange, options, customLabels }: { value: string, onChange: (v: string) => void, options: string[], customLabels?: { label: string, value: string }[] }) => (
   <div className="relative w-full">
-    <select 
-      value={value} onChange={e => onChange(e.target.value)}
-      className="appearance-none w-full bg-white border border-gray-200 text-[10px] font-black py-3 pl-4 pr-10 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer shadow-sm text-gray-600 uppercase"
-    >
-      {options.map(o => {
-        const custom = customLabels?.find(cl => cl.value === o);
-        return <option key={o} value={o}>{custom ? custom.label : o}</option>;
-      })}
+    <select value={value} onChange={e => onChange(e.target.value)} className="appearance-none w-full bg-white border border-gray-200 text-[10px] font-black py-3 pl-4 pr-10 rounded-xl outline-none focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer shadow-sm text-gray-600 uppercase">
+      {options.map(o => { const custom = customLabels?.find(cl => cl.value === o); return <option key={o} value={o}>{custom ? custom.label : o}</option>; })}
     </select>
     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
   </div>
