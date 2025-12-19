@@ -110,7 +110,6 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
 
       return true;
     }).sort((a, b) => {
-      // Ordenação cronológica rigorosa baseada no tempo
       return new Date(b.date + 'T00:00:00').getTime() - new Date(a.date + 'T00:00:00').getTime();
     });
   }, [records, searchTerm, periodFilter, yearFilter, fortnightFilter, aviaryFilter]);
@@ -156,34 +155,51 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
         if (lines.length < 2) return;
 
         const newRecords: ProductionRecord[] = [];
-        const header = lines[0].toLowerCase();
-        let separator = header.includes(';') ? ';' : ',';
-        const headerCols = lines[0].split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
         
-        // Verifica se a primeira coluna é um UUID ou apenas o texto 'id'
-        const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-        
+        // Detecção de separador (Tenta ponto-e-vírgula primeiro, comum no Brasil)
+        const firstLine = lines[0];
+        let separator = firstLine.includes(';') ? ';' : ',';
+        if (!firstLine.includes(';') && !firstLine.includes(',') && firstLine.includes('\t')) separator = '\t';
+
+        const parseDateFlexible = (dateStr: string) => {
+          if (!dateStr) return null;
+          // Caso YYYY-MM-DD
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+          // Caso DD/MM/YYYY
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+            const [d, m, y] = dateStr.split('/');
+            return `${y}-${m}-${d}`;
+          }
+          return null;
+        };
+
         for (let i = 1; i < lines.length; i++) {
           const line = lines[i].trim();
           if (!line) continue;
           const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
           
-          // Lógica inteligente de detecção: se a col 0 é UUID, a data está na 1.
-          let dataIndex = 0;
-          if (isUUID(cols[0]) || headerCols[0] === 'id') {
-            dataIndex = 1;
+          // Busca a coluna da data (pode ser a 0 ou a 1 se houver ID)
+          let date = null;
+          let dateColIndex = -1;
+
+          for (let j = 0; j < Math.min(cols.length, 3); j++) {
+            const potentialDate = parseDateFlexible(cols[j]);
+            if (potentialDate) {
+              date = potentialDate;
+              dateColIndex = j;
+              break;
+            }
           }
 
-          const date = cols[dataIndex];
-          if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+          if (!date) continue;
 
-          const aviaryId = (cols[dataIndex + 1] || '1').replace(/\D/g, '');
-          const batchId = cols[dataIndex + 2] || 'S/L';
-          const birds = Number(cols[dataIndex + 3]) || 0;
-          const clean = Number(cols[dataIndex + 4]) || 0;
-          const dirty = Number(cols[dataIndex + 5]) || 0;
-          const cracked = Number(cols[dataIndex + 6]) || 0;
-          const floor = Number(cols[dataIndex + 7]) || 0;
+          const aviaryId = (cols[dateColIndex + 1] || '1').replace(/\D/g, '');
+          const batchId = cols[dateColIndex + 2] || '-';
+          const birds = Number(cols[dateColIndex + 3]) || 0;
+          const clean = Number(cols[dateColIndex + 4]) || 0;
+          const dirty = Number(cols[dateColIndex + 5]) || 0;
+          const cracked = Number(cols[dateColIndex + 6]) || 0;
+          const floor = Number(cols[dateColIndex + 7]) || 0;
           const total = clean + dirty + cracked + floor;
           
           newRecords.push({
@@ -196,10 +212,10 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
             dirtyEggs: dirty, 
             crackedEggs: cracked, 
             floorEggs: floor, 
-            eggWeightAvg: Number(cols[dataIndex + 8]) || 0, 
-            birdWeightAvg: Number(cols[dataIndex + 9]) || 0, 
-            mortality: Number(cols[dataIndex + 10]) || 0, 
-            notes: cols[dataIndex + 11] || '', 
+            eggWeightAvg: Number(cols[dateColIndex + 8]) || 0, 
+            birdWeightAvg: Number(cols[dateColIndex + 9]) || 0, 
+            mortality: Number(cols[dateColIndex + 10]) || 0, 
+            notes: cols[dateColIndex + 11] || '', 
             createdAt: new Date().toISOString(),
             metrics: {
                 totalEggs: total, 
@@ -211,13 +227,14 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
             }
           });
         }
+        
         if (newRecords.length > 0) {
           onImportRecords(newRecords);
-          alert(`${newRecords.length} registros sincronizados.`);
+          alert(`${newRecords.length} registros importados com sucesso!`);
         } else {
-          alert("Não foi possível identificar dados válidos no CSV.");
+          alert("Nenhum dado válido encontrado. Certifique-se que as datas estão no formato DD/MM/AAAA ou AAAA-MM-DD.");
         }
-      } catch (err) { alert("Erro ao importar CSV."); }
+      } catch (err) { alert("Erro ao processar o arquivo. Verifique se é um CSV válido."); }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -227,7 +244,7 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
     <div className="space-y-6">
       <input 
         type="file" 
-        accept=".csv, application/vnd.ms-excel, text/csv" 
+        accept=".csv, text/csv, .txt, application/vnd.ms-excel" 
         ref={fileInputRef} 
         onChange={handleFileChange} 
         className="hidden" 
