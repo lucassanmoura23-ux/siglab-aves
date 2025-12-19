@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { X, Save } from 'lucide-react';
 import { BatchRecord } from '../types';
@@ -20,7 +21,8 @@ export const BatchForm: React.FC<BatchFormProps> = ({ initialData, onSave, onCan
     weight: 0,
     uniformity: 0,
     feathering: 'Bom',
-    notes: ''
+    notes: '',
+    updatedAt: new Date().toISOString()
   };
 
   const [formData, setFormData] = useState<Omit<BatchRecord, 'id'>>(() => {

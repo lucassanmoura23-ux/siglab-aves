@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { 
   ClipboardCheck, 
@@ -127,6 +128,7 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
           const cols = line.split(separator).map(c => c.replace(/"/g, '').trim());
           if (cols.length < 5) continue;
 
+          // Fixed missing 'updatedAt' property for BatchRecord
           newRecords.push({
             id: crypto.randomUUID(),
             date: cols[0],
@@ -137,6 +139,7 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
             weight: Number(cols[5]) || 0,
             uniformity: Number(cols[6]) || 0,
             feathering: (cols[7] as any) || 'Bom',
+            updatedAt: new Date().toISOString()
           });
         }
         if (newRecords.length > 0) onImportRecords(newRecords);

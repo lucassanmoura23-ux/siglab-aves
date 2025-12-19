@@ -26,6 +26,7 @@ export interface ProductionFormData {
 export interface ProductionRecord extends ProductionFormData {
   id: string;
   createdAt: string;
+  updatedAt: string; // Adicionado para controle de sync
   metrics: ProductionMetrics;
 }
 
@@ -40,6 +41,7 @@ export interface BatchRecord {
   uniformity: number;
   feathering: 'Excelente' | 'Bom' | 'Regular' | 'Ruim';
   notes?: string;
+  updatedAt: string; // Adicionado para controle de sync
 }
 
 export type ViewState = 

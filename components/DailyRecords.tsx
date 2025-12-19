@@ -187,10 +187,30 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
           const cracked = Number(cols[dateColIndex + 6]) || 0;
           const floor = Number(cols[dateColIndex + 7]) || 0;
           const total = clean + dirty + cracked + floor;
+          // Fixed missing 'updatedAt' property for ProductionRecord
           newRecords.push({
-            id: crypto.randomUUID(), date: date, aviaryId: aviaryId, batchId: batchId, liveBirds: birds, cleanEggs: clean, dirtyEggs: dirty, crackedEggs: cracked, floorEggs: floor, eggWeightAvg: Number(cols[dateColIndex + 8]) || 0, birdWeightAvg: Number(cols[dateColIndex + 9]) || 0, mortality: Number(cols[dateColIndex + 10]) || 0, notes: cols[dateColIndex + 11] || '', createdAt: new Date().toISOString(),
+            id: crypto.randomUUID(), 
+            date: date, 
+            aviaryId: aviaryId, 
+            batchId: batchId, 
+            liveBirds: birds, 
+            cleanEggs: clean, 
+            dirtyEggs: dirty, 
+            crackedEggs: cracked, 
+            floorEggs: floor, 
+            eggWeightAvg: Number(cols[dateColIndex + 8]) || 0, 
+            birdWeightAvg: Number(cols[dateColIndex + 9]) || 0, 
+            mortality: Number(cols[dateColIndex + 10]) || 0, 
+            notes: cols[dateColIndex + 11] || '', 
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             metrics: {
-                totalEggs: total, cleanPercentage: total > 0 ? (clean / total) * 100 : 0, dirtyPercentage: total > 0 ? (dirty / total) * 100 : 0, crackedPercentage: total > 0 ? (cracked / total) * 100 : 0, floorPercentage: total > 0 ? (floor / total) * 100 : 0, layingRate: birds > 0 ? Number(((total / birds) * 100).toFixed(1)) : 0
+                totalEggs: total, 
+                cleanPercentage: total > 0 ? (clean / total) * 100 : 0, 
+                dirtyPercentage: total > 0 ? (dirty / total) * 100 : 0, 
+                crackedPercentage: total > 0 ? (cracked / total) * 100 : 0, 
+                floorPercentage: total > 0 ? (floor / total) * 100 : 0, 
+                layingRate: birds > 0 ? Number(((total / birds) * 100).toFixed(1)) : 0
             }
           });
         }

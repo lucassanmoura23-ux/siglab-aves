@@ -133,10 +133,12 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
         return;
     }
 
+    // Fixed missing 'updatedAt' property for ProductionRecord
     const record: ProductionRecord = {
       ...formData,
       id: initialData?.id || crypto.randomUUID(),
       createdAt: initialData?.createdAt || new Date().toISOString(),
+      updatedAt: initialData?.updatedAt || new Date().toISOString(),
       metrics: metrics
     };
 
@@ -306,8 +308,8 @@ export const ProductionForm: React.FC<ProductionFormProps> = ({
               <div className="text-2xl font-bold text-green-700">{metrics.dirtyPercentage}%</div>
             </div>
             <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-              <div className="text-xs font-medium text-green-800 uppercase mb-1">Trincados</div>
-              <div className="text-2xl font-bold text-green-700">{metrics.crackedPercentage}%</div>
+              <div className="text-xs font-medium text-red-800 uppercase mb-1">Trincados</div>
+              <div className="text-2xl font-bold text-red-700">{metrics.crackedPercentage}%</div>
             </div>
             {hasFloorEggs ? (
                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-100 animate-in fade-in zoom-in duration-300">
