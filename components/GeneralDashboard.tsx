@@ -36,6 +36,7 @@ const AVIARY_COLORS: Record<string, string> = {
 };
 
 export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, batchRecords }) => {
+  // Estados de Filtro
   const [periodFilter, setPeriodFilter] = useState('Todo o Período');
   const [yearFilter, setYearFilter] = useState('-- Por Ano --');
   const [monthFilter, setMonthFilter] = useState('-- Por Mês --');
@@ -43,9 +44,11 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
   const [aviaryFilter, setAviaryFilter] = useState('Todos Aviários');
   const [batchFilter, setBatchFilter] = useState('-- Todos Lotes --');
 
+  // Estados de Hover para os Gráficos
   const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
   const [hoveredAge, setHoveredAge] = useState<number | null>(null);
 
+  // FIX: Added missing clearFilters function to reset all dashboard filters
   const clearFilters = () => {
     setPeriodFilter('Todo o Período');
     setYearFilter('-- Por Ano --');
@@ -55,6 +58,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     setBatchFilter('-- Todos Lotes --');
   };
 
+  // Opções Dinâmicas de Filtro
   const yearOptions = useMemo(() => {
     const years = (Array.from(new Set(records.map(r => r.date.split('-')[0]))) as string[])
       .sort((a, b) => b.localeCompare(a));
@@ -88,10 +92,12 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     return options;
   }, [records]);
 
+  // Lógica de Filtros Combinados
   const filteredRecords = useMemo(() => {
     return records.filter(record => {
       const [rYearStr, rMonthStr, rDayStr] = record.date.split('-');
       const rMonth = parseInt(rMonthStr);
+      const rDay = parseInt(rDayStr);
       const recordDate = new Date(record.date);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -108,8 +114,8 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
       if (fortnightFilter !== '-- Por Quinzena --') {
         const [fYear, fMonthIdx, fPart] = fortnightFilter.split('-');
         if (rYearStr !== fYear || (rMonth - 1) !== parseInt(fMonthIdx)) return false;
-        if (fPart === '1' && parseInt(rDayStr) > 15) return false;
-        if (fPart === '2' && parseInt(rDayStr) <= 15) return false;
+        if (fPart === '1' && rDay > 15) return false;
+        if (fPart === '2' && rDay <= 15) return false;
       }
 
       if (periodFilter !== 'Todo o Período') {
@@ -125,6 +131,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     }).sort((a, b) => a.date.localeCompare(b.date));
   }, [records, periodFilter, yearFilter, monthFilter, fortnightFilter, aviaryFilter, batchFilter]);
 
+  // Indicadores
   const stats = useMemo(() => {
     if (filteredRecords.length === 0) return null;
     const totalEggs = filteredRecords.reduce((sum, r) => sum + r.metrics.totalEggs, 0);
@@ -153,6 +160,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     };
   }, [filteredRecords]);
 
+  // FIX: Added missing qualitySegments logic for egg quality donut chart
   const qualitySegments = useMemo(() => {
     if (!stats) return [];
     const { clean, dirty, cracked, floor, total } = stats.quality;
@@ -171,6 +179,181 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
       return { ...item, dash, offset };
     });
   }, [stats]);
+
+  // Dados Curva de Maturidade (Postura x Idade)
+  const maturityData = useMemo(() => {
+    const batchesMap: Record<string, Record<number, { sum: number, count: number }>> = {};
+    
+    filteredRecords.forEach(r => {
+      const refBatch = batchRecords.find(b => b.batchId === r.batchId && b.aviaryId === r.aviaryId);
+      if (!refBatch) return;
+
+      const dateProd = new Date(r.date);
+      const dateRef = new Date(refBatch.date);
+      const diffWeeks = Math.floor((dateProd.getTime() - dateRef.getTime()) / (7 * 24 * 60 * 60 * 1000));
+      const currentAge = refBatch.ageWeeks + diffWeeks;
+
+      if (!batchesMap[r.batchId]) batchesMap[r.batchId] = {};
+      if (!batchesMap[r.batchId][currentAge]) batchesMap[r.batchId][currentAge] = { sum: 0, count: 0 };
+      
+      batchesMap[r.batchId][currentAge].sum += r.metrics.layingRate;
+      batchesMap[r.batchId][currentAge].count += 1;
+    });
+
+    const result: { batchId: string, points: { age: number, rate: number }[] }[] = [];
+    Object.entries(batchesMap).forEach(([batchId, ages]) => {
+      const points = Object.entries(ages).map(([age, data]) => ({
+        age: parseInt(age),
+        rate: data.sum / data.count
+      })).sort((a, b) => a.age - b.age);
+      result.push({ batchId, points });
+    });
+
+    return result;
+  }, [filteredRecords, batchRecords]);
+
+  // Idades únicas para as Hit Zones
+  const allMaturityAges = useMemo(() => {
+    const ages = new Set<number>();
+    maturityData.forEach(b => b.points.forEach(p => ages.add(p.age)));
+    return Array.from(ages).sort((a, b) => a - b);
+  }, [maturityData]);
+
+  // --- Renderização do Gráfico de Maturidade ---
+  const renderMaturityChart = () => {
+    const width = 1000;
+    const height = 350;
+    const paddingLeft = 70;
+    const paddingRight = 30;
+    const paddingTop = 10; 
+    const paddingBottom = 70;
+    const chartW = width - paddingLeft - paddingRight;
+    const chartH = height - paddingTop - paddingBottom;
+
+    if (maturityData.length === 0) return <div className="h-full flex items-center justify-center text-gray-400 italic py-20">Sem dados de lote para cruzamento de idade</div>;
+
+    const minAge = 0;
+    const maxAge = 80;
+    const ageRange = maxAge - minAge;
+
+    const getX = (age: number) => paddingLeft + ((age - minAge) / ageRange) * chartW;
+    const getY = (rate: number) => height - paddingBottom - (rate / 100) * chartH;
+
+    const lineColors = ['#000080', '#FF8C00', '#10b981', '#a855f7'];
+
+    return (
+      <div className="relative w-full h-full flex flex-col overflow-x-auto scrollbar-hide">
+        <div className="min-w-[800px]">
+          <div className="flex items-center gap-3 mb-2">
+             <div className="w-2 h-5 bg-blue-600 rounded-full"></div>
+             <h3 className="text-sm font-black text-gray-700 uppercase tracking-tight">Curva de Maturidade do Lote (Postura x Idade)</h3>
+          </div>
+
+          <div className="flex justify-center gap-8 mb-4">
+             {maturityData.map((b, i) => (
+               <div key={b.batchId} className="flex items-center gap-2">
+                  <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: lineColors[i % lineColors.length] }}></div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Lote: {b.batchId}</span>
+               </div>
+             ))}
+          </div>
+
+          <div className="relative">
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+              {Array.from({ length: 81 }, (_, i) => i).map(age => (
+                <line 
+                  key={`v-week-${age}`}
+                  x1={getX(age)} y1={paddingTop} x2={getX(age)} y2={getY(0)} 
+                  stroke="#f1f5f9" strokeWidth={age % 10 === 0 ? "1" : "0.5"} 
+                />
+              ))}
+
+              {[0, 25, 50, 75, 100].map(v => (
+                <g key={v}>
+                  <line x1={paddingLeft} y1={getY(v)} x2={width - paddingRight} y2={getY(v)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 4" />
+                  <text x={paddingLeft - 15} y={getY(v) + 4} textAnchor="end" className="text-[11px] fill-gray-400 font-black">{v}</text>
+                </g>
+              ))}
+
+              <line x1={paddingLeft} y1={getY(0)} x2={width - paddingRight} y2={getY(0)} stroke="#1f2937" strokeWidth="1.5" />
+              <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={getY(0)} stroke="#1f2937" strokeWidth="1.5" />
+
+              <text x={20} y={height / 2} transform={`rotate(-90, 20, ${height / 2})`} textAnchor="middle" className="text-[11px] font-black fill-gray-800 tracking-tight">Postura (%)</text>
+              <text x={width / 2} y={height - 15} textAnchor="middle" className="text-[11px] font-black fill-gray-800 tracking-tight">Idade em semanas</text>
+
+              {maturityData.map((batch, idx) => {
+                if (batch.points.length < 2) return null;
+                
+                let d = `M ${getX(batch.points[0].age)},${getY(batch.points[0].rate)}`;
+                for (let i = 0; i < batch.points.length - 1; i++) {
+                  const curr = batch.points[i];
+                  const next = batch.points[i+1];
+                  const cx = (getX(curr.age) + getX(next.age)) / 2;
+                  d += ` C ${cx},${getY(curr.rate)} ${cx},${getY(next.rate)} ${getX(next.age)},${getY(next.rate)}`;
+                }
+
+                return (
+                  <path 
+                    key={batch.batchId}
+                    d={d} fill="none" 
+                    stroke={lineColors[idx % lineColors.length]} 
+                    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" 
+                    className="opacity-100 transition-all duration-300"
+                  />
+                );
+              })}
+
+              {[0, 20, 40, 60, 80].map(age => (
+                <g key={age}>
+                   <line x1={getX(age)} y1={getY(0)} x2={getX(age)} y2={getY(0) + 8} stroke="#1f2937" strokeWidth="1.5" />
+                   <text x={getX(age)} y={getY(0) + 25} textAnchor="middle" className="text-[12px] fill-gray-800 font-black">{age}</text>
+                </g>
+              ))}
+
+              {allMaturityAges.map((age) => (
+                 <rect 
+                   key={age}
+                   x={getX(age) - 10} y={0} width="20" height={height}
+                   fill="transparent" className="cursor-pointer"
+                   onMouseEnter={() => setHoveredAge(age)}
+                   onMouseLeave={() => setHoveredAge(null)}
+                 />
+              ))}
+              {hoveredAge !== null && (
+                <line x1={getX(hoveredAge)} y1={paddingTop} x2={getX(hoveredAge)} y2={getY(0)} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4 4" />
+              )}
+            </svg>
+
+            {hoveredAge !== null && (
+              <div 
+                className="absolute bg-white border border-gray-200 p-2.5 rounded shadow-lg z-50 pointer-events-none transition-all duration-75 min-w-[120px]"
+                style={{ 
+                  top: '20px', 
+                  left: (getX(hoveredAge) / width) > 0.7 ? 'auto' : `${(getX(hoveredAge) / width) * 100}%`,
+                  right: (getX(hoveredAge) / width) > 0.7 ? '5%' : 'auto',
+                  transform: (getX(hoveredAge) / width) > 0.7 ? 'none' : 'translateX(15px)'
+                }}
+              >
+                <div className="text-[10px] font-black text-gray-400 mb-1 border-b pb-1 uppercase">{hoveredAge} Semanas</div>
+                <div className="space-y-1">
+                   {maturityData.map((batch, idx) => {
+                     const p = batch.points.find(pt => pt.age === hoveredAge);
+                     if (!p) return null;
+                     return (
+                       <div key={batch.batchId} className="flex items-center justify-between text-[11px] font-bold">
+                          <span style={{ color: lineColors[idx % lineColors.length] }}>Lote {batch.batchId}</span>
+                          <span className="text-gray-900">{p.rate.toFixed(1)}%</span>
+                       </div>
+                     );
+                   })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const lineChartData = useMemo(() => {
     const dataByMonth: Record<number, Record<string, number>> = {};
@@ -197,7 +380,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     const lineColor = isSingleAviary ? AVIARY_COLORS[activeId] : '#2563eb';
 
     let maxVal = 0;
-    Object.values(lineChartData).forEach((m: any) => {
+    Object.values(lineChartData).forEach((m: Record<string, number>) => {
       const val = isSingleAviary ? m[activeId] : m['total'];
       maxVal = Math.max(maxVal, val);
     });
@@ -207,7 +390,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
     const getX = (idx: number) => paddingLeft + (idx * (width - paddingLeft - paddingRight) / 11);
     const getY = (val: number) => height - paddingBottom - (val / yAxisMax) * (height - paddingBottom - paddingTop);
 
-    const points = Object.values(lineChartData).map((m: any, i) => ({ 
+    const points = Object.values(lineChartData).map((m: Record<string, number>, i) => ({ 
       x: getX(i), y: getY(isSingleAviary ? m[activeId] : m['total']) 
     }));
 
@@ -239,7 +422,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
               <line x1={getX(hoveredMonthIdx)} y1={paddingTop} x2={getX(hoveredMonthIdx)} y2={height - paddingBottom} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4 4" />
             )}
             {hoveredMonthIdx !== null && (
-              <circle cx={getX(hoveredMonthIdx)} cy={getY(isSingleAviary ? (lineChartData[hoveredMonthIdx] as any)[activeId] : (lineChartData[hoveredMonthIdx] as any)['total'])} r="6" fill="white" stroke={lineColor} strokeWidth="4" />
+              <circle cx={getX(hoveredMonthIdx)} cy={getY(isSingleAviary ? (lineChartData[hoveredMonthIdx] as Record<string, number>)[activeId] : (lineChartData[hoveredMonthIdx] as Record<string, number>)['total'])} r="6" fill="white" stroke={lineColor} strokeWidth="4" />
             )}
             {MONTHS_SHORT.map((_, i) => (
               <rect key={i} x={getX(i) - 20} y={0} width="40" height={height} fill="transparent" className="cursor-pointer" onMouseEnter={() => setHoveredMonthIdx(i)} onMouseLeave={() => setHoveredMonthIdx(null)} />
@@ -271,7 +454,7 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
       {!stats ? (
         <div className="p-10 md:p-20 text-center bg-white rounded-2xl border border-dashed border-gray-200 text-gray-400 font-medium">Nenhum dado encontrado para os filtros selecionados.</div>
       ) : (
-        <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500 pb-16">
+        <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
              <KPICard title="Total Ovos" value={stats.totalEggs.toLocaleString('pt-BR')} subtext="(acumulado)" icon={<Egg />} color="blue" />
              <KPICard title="Taxa Postura" value={`${stats.avgLayingRate.toFixed(1)}%`} icon={<TrendingUp />} color="green" />
@@ -331,6 +514,10 @@ export const GeneralDashboard: React.FC<GeneralDashboardProps> = ({ records, bat
                </h3>
                <div className="h-64 w-full">{renderLineChart()}</div>
             </div>
+
+            <div className="bg-white p-4 md:px-8 pt-4 pb-8 md:pb-12 rounded-2xl border border-gray-100 shadow-sm w-full">
+               <div className="w-full min-h-[400px]">{renderMaturityChart()}</div>
+            </div>
           </div>
         </div>
       )}
@@ -371,6 +558,7 @@ const QualityBox = ({ label, value, total, color }: { label: string, value: numb
   );
 };
 
+// FIX: Changed icon type to React.ReactElement and cast to any in cloneElement to resolve type errors
 const KPICard = ({ title, value, subtext, icon, color }: { title: string, value: string, subtext?: string, icon: React.ReactElement, color: string }) => {
   const colorMap: Record<string, string> = { blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600', purple: 'bg-purple-50 text-purple-600', red: 'bg-red-50 text-red-600', teal: 'bg-teal-50 text-teal-600', indigo: 'bg-indigo-50 text-indigo-600' };
   return (

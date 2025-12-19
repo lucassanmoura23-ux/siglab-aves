@@ -1,12 +1,21 @@
-// Senior Frontend Engineer Refactor: Adhering to @google/genai guidelines
+
 import { GoogleGenAI } from "@google/genai";
+
+const getClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    console.warn("API Key for Gemini not found.");
+    return null;
+  }
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
 
 export const generateAIReport = async (data: {
   records: any[],
   filters: any
 }) => {
-  // Always initialize right before the API call to ensure we use the correct environment API_KEY
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const client = getClient();
+  if (!client) return "Configuração de API necessária para análise. Verifique sua chave API.";
 
   try {
     const prompt = `
@@ -32,13 +41,11 @@ export const generateAIReport = async (data: {
       Língua: Português Brasileiro. Seja rápido e evite introduções longas.
     `;
 
-    // Using gemini-3-flash-preview for summarization task
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+    const response = await client.models.generateContent({
+      model: 'gemini-3-flash-preview', // Mudado para Flash para ser mais rápido
       contents: prompt,
     });
 
-    // Directly access the text property as defined in the SDK
     return response.text;
   } catch (error) {
     console.error("Erro na geração do relatório IA:", error);

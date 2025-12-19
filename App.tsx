@@ -11,15 +11,16 @@ import { AIReports } from './components/AIReports';
 import { LandingPage } from './components/LandingPage';
 import { SyncManager } from './components/SyncManager';
 import { ViewState, ProductionRecord, BatchRecord } from './types';
-import { LayoutGrid, Menu, X, Share2, Cloud, CloudOff, RefreshCw, PlusCircle, CheckCircle2 } from 'lucide-react';
-import { saveToCloud, fetchFromCloud } from './services/cloudSyncService';
+import { LayoutGrid, Menu, X, Cloud, CloudOff, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { pushToCloud, fetchFromCloud } from './services/cloudSyncService';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [currentView, setCurrentView] = useState<ViewState>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [cloudStatus, setCloudStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   
+  // Código de Sincronização
   const [cloudKey, setCloudKey] = useState<string>(() => {
     return localStorage.getItem('siglab_cloud_key') || '';
   });
@@ -37,48 +38,48 @@ const App: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<ProductionRecord | null>(null);
   const [editingBatch, setEditingBatch] = useState<BatchRecord | null>(null);
 
-  // --- Lógica de Sincronização Robusta ---
-  
-  const pushDataToCloud = useCallback(async (currentRecords: ProductionRecord[], currentBatches: BatchRecord[]) => {
-    if (!cloudKey || cloudKey.length < 3) return;
-    setCloudStatus('syncing');
-    const success = await saveToCloud(cloudKey, { records: currentRecords, batchRecords: currentBatches });
-    setCloudStatus(success ? 'synced' : 'error');
+  // --- Lógica de Sincronização ---
+
+  const handlePushData = useCallback(async (recs: ProductionRecord[], batches: BatchRecord[]) => {
+    if (!cloudKey || cloudKey.length < 4) return;
+    setSyncStatus('syncing');
+    const success = await pushToCloud(cloudKey, { records: recs, batchRecords: batches });
+    setSyncStatus(success ? 'synced' : 'error');
   }, [cloudKey]);
 
-  const pullDataFromCloud = useCallback(async (key: string) => {
-    if (!key || key.length < 3) return;
-    setCloudStatus('syncing');
-    const cloudData = await fetchFromCloud(key);
+  const handleFetchData = useCallback(async () => {
+    if (!cloudKey || cloudKey.length < 4) return;
+    setSyncStatus('syncing');
+    const cloudData = await fetchFromCloud(cloudKey);
     if (cloudData) {
-      // Evitar sobrescrever se os dados locais forem mais recentes (opcional, aqui priorizamos nuvem)
+      // Mesclar dados (prioridade para nuvem neste caso simples)
       setRecords(cloudData.records);
       setBatchRecords(cloudData.batchRecords);
-      setCloudStatus('synced');
+      setSyncStatus('synced');
     } else {
-      setCloudStatus('synced'); // Caso seja uma chave nova sem dados
+      setSyncStatus('idle');
     }
-  }, []);
+  }, [cloudKey]);
 
-  // Inicialização: Puxa dados da nuvem ao abrir
+  // Ao mudar a chave ou iniciar, buscar da nuvem
   useEffect(() => {
     if (cloudKey) {
-      pullDataFromCloud(cloudKey);
+      handleFetchData();
+      localStorage.setItem('siglab_cloud_key', cloudKey);
     }
-  }, [cloudKey, pullDataFromCloud]);
+  }, [cloudKey, handleFetchData]);
 
-  // Salva localmente e sincroniza com a nuvem após mudanças
+  // Ao mudar os dados locais, agendar envio para nuvem (Debounce de 2s)
   useEffect(() => {
     localStorage.setItem('siglab_records', JSON.stringify(records));
     localStorage.setItem('siglab_batch_records', JSON.stringify(batchRecords));
-    localStorage.setItem('siglab_cloud_key', cloudKey);
-    
+
     const timeout = setTimeout(() => {
-      pushDataToCloud(records, batchRecords);
-    }, 1500); // Debounce para não sobrecarregar a API
-    
+      handlePushData(records, batchRecords);
+    }, 2000);
+
     return () => clearTimeout(timeout);
-  }, [records, batchRecords, cloudKey, pushDataToCloud]);
+  }, [records, batchRecords, handlePushData]);
 
   const syncProductionWithBatches = (currentProduction: ProductionRecord[], currentBatches: BatchRecord[]): ProductionRecord[] => {
     return currentProduction.map(prod => {
@@ -106,11 +107,6 @@ const App: React.FC = () => {
     setCurrentView('daily-records');
   };
 
-  const handleEditRecord = (record: ProductionRecord) => {
-    setEditingRecord(record);
-    setCurrentView('new-production');
-  };
-
   const handleSaveBatch = (record: BatchRecord) => {
     let updatedBatches: BatchRecord[];
     if (editingBatch) {
@@ -122,11 +118,6 @@ const App: React.FC = () => {
     setBatchRecords(updatedBatches);
     setRecords(prev => syncProductionWithBatches(prev, updatedBatches));
     setCurrentView('batch-characteristics');
-  };
-
-  const handleSyncUpdate = (newKey: string) => {
-    setCloudKey(newKey);
-    setCurrentView('dashboard');
   };
 
   const handleNavigate = (view: ViewState) => {
@@ -150,7 +141,7 @@ const App: React.FC = () => {
             initialData={editingRecord}
             batchRecords={batchRecords}
             onSave={handleSaveRecord} 
-            onCancel={() => handleNavigate('daily-records')}
+            onCancel={() => setCurrentView('daily-records')}
           />
         );
       case 'daily-records':
@@ -158,7 +149,7 @@ const App: React.FC = () => {
           <DailyRecords 
             records={records} 
             batchRecords={batchRecords}
-            onEditRecord={handleEditRecord}
+            onEditRecord={(r) => { setEditingRecord(r); setCurrentView('new-production'); }}
             onDeleteRecord={(id) => setRecords(prev => prev.filter(r => r.id !== id))}
             onDeleteAll={() => setRecords([])}
             onImportRecords={(recs) => setRecords(prev => [...recs, ...prev])}
@@ -177,7 +168,11 @@ const App: React.FC = () => {
               setRecords(prev => syncProductionWithBatches(prev, updated));
             }}
             onDeleteAll={() => setBatchRecords([])}
-            onImportRecords={(recs) => setBatchRecords(prev => [...recs, ...prev])}
+            onImportRecords={(recs) => {
+              const updated = [...recs, ...batchRecords];
+              setBatchRecords(updated);
+              setRecords(prev => syncProductionWithBatches(prev, updated));
+            }}
           />
         );
       case 'new-batch-characterization':
@@ -185,7 +180,7 @@ const App: React.FC = () => {
           <BatchForm
             initialData={editingBatch}
             onSave={handleSaveBatch}
-            onCancel={() => handleNavigate('batch-characteristics')}
+            onCancel={() => setCurrentView('batch-characteristics')}
           />
         );
       case 'aviary-details':
@@ -195,8 +190,10 @@ const App: React.FC = () => {
       case 'sync-devices':
         return (
           <SyncManager 
-            currentKey={cloudKey}
-            onUpdateKey={handleSyncUpdate}
+            currentKey={cloudKey} 
+            onUpdateKey={setCloudKey} 
+            onForceSync={handleFetchData}
+            syncStatus={syncStatus}
           />
         );
       default:
@@ -214,52 +211,40 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 lg:ml-64 p-4 md:p-8 overflow-y-auto h-screen transition-all relative">
-        <div className="w-full max-w-[1400px] mx-auto pb-20">
+        <div className="w-full max-w-[1400px] mx-auto pb-10">
           
-          {/* Header Superior Dinâmico */}
-          <div className="flex justify-between items-center mb-6 md:mb-10 bg-white/90 backdrop-blur-md p-3 -mx-4 -mt-4 md:m-0 rounded-none md:rounded-2xl sticky top-0 z-20 border-b md:border border-gray-100 shadow-sm">
+          <div className="flex justify-between items-center mb-6 md:mb-10">
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2 hover:bg-gray-100 rounded-xl transition-colors"
-              >
+              <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 -ml-2 hover:bg-gray-100 rounded-xl transition-colors">
                 <Menu size={24} className="text-gray-600" />
               </button>
-              
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg">
-                   <svg viewBox="0 0 100 100" className="w-5 h-5 md:w-6 md:h-6" fill="white">
-                    <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" fill="white" />
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-white border border-gray-100 flex items-center justify-center shadow-md">
+                   <svg viewBox="0 0 100 100" className="w-7 h-7 md:w-9 md:h-9" fill="none">
+                    <path d="M35 45 L50 35 L65 45 L65 65 L35 65 Z" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
-                <h1 className="text-sm md:text-xl font-black text-[#1e293b] tracking-tight uppercase">
-                  SIGLAB <span className="text-blue-600">AVIÁRIO</span>
+                <h1 className="text-lg md:text-2xl font-black text-[#1e293b] tracking-tight uppercase">
+                  SIGLAB <span className="bg-gradient-to-r from-emerald-500 to-cyan-600 bg-clip-text text-transparent">AVIÁRIO</span>
                 </h1>
               </div>
             </div>
 
-            {/* Status de Sincronização e Botão de Refresh */}
+            {/* Sync Badge */}
             <div className="flex items-center gap-2">
-              <button 
-                onClick={() => pullDataFromCloud(cloudKey)}
-                title="Forçar Atualização da Nuvem"
-                className={`p-2 rounded-xl transition-all ${cloudStatus === 'syncing' ? 'bg-blue-50 text-blue-600 animate-spin' : 'bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-600'}`}
-              >
-                <RefreshCw size={18} />
-              </button>
-
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${
-                cloudStatus === 'synced' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                cloudStatus === 'syncing' ? 'bg-blue-50 border-blue-100 text-blue-600' :
-                'bg-red-50 border-red-100 text-red-600'
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
+                syncStatus === 'synced' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 
+                syncStatus === 'syncing' ? 'bg-blue-50 border-blue-100 text-blue-600' :
+                syncStatus === 'error' ? 'bg-red-50 border-red-100 text-red-600' :
+                'bg-gray-50 border-gray-100 text-gray-400'
               }`}>
-                {cloudStatus === 'synced' ? <CheckCircle2 size={14} /> : 
-                 cloudStatus === 'syncing' ? <RefreshCw size={14} className="animate-spin" /> : 
-                 <CloudOff size={14} />}
+                {syncStatus === 'syncing' ? <RefreshCw size={12} className="animate-spin" /> : 
+                 syncStatus === 'synced' ? <CheckCircle2 size={12} /> : 
+                 syncStatus === 'error' ? <CloudOff size={12} /> : <Cloud size={12} />}
                 <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">
-                  {cloudStatus === 'synced' ? 'Sincronizado' : 
-                   cloudStatus === 'syncing' ? 'Conectando...' : 
-                   'Erro de Nuvem'}
+                  {syncStatus === 'syncing' ? 'Sincronizando...' : 
+                   syncStatus === 'synced' ? 'Nuvem OK' : 
+                   syncStatus === 'error' ? 'Erro Conexão' : 'Desconectado'}
                 </span>
               </div>
             </div>
@@ -269,16 +254,6 @@ const App: React.FC = () => {
             {renderContent()}
           </div>
         </div>
-
-        {/* FAB Mobile */}
-        {currentView !== 'new-production' && (
-          <button 
-            onClick={() => handleNavigate('new-production')}
-            className="lg:hidden fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center z-40 active:scale-90 transition-transform"
-          >
-            <PlusCircle size={28} />
-          </button>
-        )}
       </main>
     </div>
   );

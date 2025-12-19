@@ -43,10 +43,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
       ]
     },
     {
-      title: 'FERRAMENTAS',
+      title: 'CONECTIVIDADE',
       items: [
-        { id: 'ai-reports', label: 'Relatórios IA', icon: FileText },
         { id: 'sync-devices', label: 'Sincronizar Dispositivos', icon: Share2 },
+        { id: 'ai-reports', label: 'Relatórios IA', icon: FileText },
       ]
     }
   ];
@@ -136,6 +136,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="pt-2 border-t border-gray-200/50">
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">v1.5.0 Premium Edition</p>
           </div>
         </div>
       </div>
