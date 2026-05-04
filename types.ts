@@ -26,7 +26,6 @@ export interface ProductionFormData {
 export interface ProductionRecord extends ProductionFormData {
   id: string;
   createdAt: string;
-  updatedAt: string; // Adicionado para controle de sync
   metrics: ProductionMetrics;
 }
 
@@ -40,8 +39,12 @@ export interface BatchRecord {
   weight: number;
   uniformity: number;
   feathering: 'Excelente' | 'Bom' | 'Regular' | 'Ruim';
+  vaccineType?: string;
+  vaccinationAge?: number;
+  dose?: '1ª Dose' | '2ª Dose' | '3ª Dose';
+  isFinalized?: boolean;
+  finalizationDate?: string;
   notes?: string;
-  updatedAt: string; // Adicionado para controle de sync
 }
 
 export type ViewState = 

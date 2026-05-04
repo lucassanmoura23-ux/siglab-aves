@@ -13,8 +13,10 @@ import {
   Bird,
   FileDown,
   ChevronDown,
-  Filter as FilterIcon
+  Filter as FilterIcon,
+  FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { ProductionRecord, BatchRecord } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 
@@ -131,99 +133,130 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
     setAviaryFilter('Todos os Aviários');
   };
 
-  const handleExportCSV = () => {
+  const handleExportXLSX = () => {
     if (filteredRecords.length === 0) { alert("Não há dados."); return; }
-    const headers = ["Data", "Aviario", "Lote", "Aves Vivas", "Ovos Limpos", "Ovos Sujos", "Ovos Trincados", "Ovos Cama", "Peso Ovos", "Peso Aves", "Mortalidade", "Observacoes"];
-    const csvRows = [headers.join(';'), ...filteredRecords.map(r => [r.date, r.aviaryId, r.batchId || '-', r.liveBirds, r.cleanEggs, r.dirtyEggs, r.crackedEggs, r.floorEggs, r.eggWeightAvg, r.birdWeightAvg, r.mortality, `"${(r.notes || '').replace(/"/g, '""')}"`].join(';'))];
-    const csvContent = "\uFEFF" + csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `producao_siglab_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    
+    const data = filteredRecords.map(r => ({
+      "Data": r.date,
+      "Aviario": r.aviaryId,
+      "Lote": r.batchId || '-',
+      "Aves Vivas": r.liveBirds,
+      "Ovos Limpos": r.cleanEggs,
+      "Ovos Sujos": r.dirtyEggs,
+      "Ovos Trincados": r.crackedEggs,
+      "Ovos Cama": r.floorEggs,
+      "Peso Ovos": r.eggWeightAvg,
+      "Peso Aves": r.birdWeightAvg,
+      "Mortalidade": r.mortality,
+      "Observacoes": r.notes || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Produção");
+    XLSX.writeFile(wb, `producao_siglab_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (!text) return;
       try {
-        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-        if (lines.length < 2) return;
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+
+        if (json.length < 2) return;
+
         const newRecords: ProductionRecord[] = [];
-        const firstLine = lines[0];
-        let separator = firstLine.includes(';') ? ';' : ',';
-        const parseDateFlexible = (dateStr: string) => {
+        
+        const parseDateFlexible = (dateStr: any) => {
           if (!dateStr) return null;
-          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-          if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-            const [d, m, y] = dateStr.split('/');
+          
+          // Handle Excel date numbers
+          if (typeof dateStr === 'number') {
+            const date = XLSX.SSF.parse_date_code(dateStr);
+            const y = date.y;
+            const m = String(date.m).padStart(2, '0');
+            const d = String(date.d).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          }
+
+          const str = String(dateStr).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+            const [d, m, y] = str.split('/');
             return `${y}-${m}-${d}`;
           }
           return null;
         };
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          const cols = line.split(separator).map(c => c.trim().replace(/^"|"$/g, ''));
-          let date = null;
-          let dateColIndex = -1;
-          for (let j = 0; j < Math.min(cols.length, 3); j++) {
-            const potentialDate = parseDateFlexible(cols[j]);
-            if (potentialDate) { date = potentialDate; dateColIndex = j; break; }
-          }
+
+        // Try to find headers or assume standard order
+        // Headers: Data, Aviario, Lote, Aves Vivas, Ovos Limpos, Ovos Sujos, Ovos Trincados, Ovos Cama, Peso Ovos, Peso Aves, Mortalidade, Observacoes
+        for (let i = 1; i < json.length; i++) {
+          const row = json[i];
+          if (!row || row.length === 0) continue;
+
+          let date = parseDateFlexible(row[0]);
           if (!date) continue;
-          const aviaryId = (cols[dateColIndex + 1] || '1').replace(/\D/g, '');
-          const batchId = cols[dateColIndex + 2] || '-';
-          const birds = Number(cols[dateColIndex + 3]) || 0;
-          const clean = Number(cols[dateColIndex + 4]) || 0;
-          const dirty = Number(cols[dateColIndex + 5]) || 0;
-          const cracked = Number(cols[dateColIndex + 6]) || 0;
-          const floor = Number(cols[dateColIndex + 7]) || 0;
+
+          const aviaryId = String(row[1] || '1').replace(/\D/g, '');
+          const batchId = String(row[2] || '-');
+          const birds = Number(row[3]) || 0;
+          const clean = Number(row[4]) || 0;
+          const dirty = Number(row[5]) || 0;
+          const cracked = Number(row[6]) || 0;
+          const floor = Number(row[7]) || 0;
           const total = clean + dirty + cracked + floor;
-          // Fixed missing 'updatedAt' property for ProductionRecord
+
           newRecords.push({
-            id: crypto.randomUUID(), 
-            date: date, 
-            aviaryId: aviaryId, 
-            batchId: batchId, 
-            liveBirds: birds, 
-            cleanEggs: clean, 
-            dirtyEggs: dirty, 
-            crackedEggs: cracked, 
-            floorEggs: floor, 
-            eggWeightAvg: Number(cols[dateColIndex + 8]) || 0, 
-            birdWeightAvg: Number(cols[dateColIndex + 9]) || 0, 
-            mortality: Number(cols[dateColIndex + 10]) || 0, 
-            notes: cols[dateColIndex + 11] || '', 
+            id: crypto.randomUUID(),
+            date: date,
+            aviaryId: aviaryId,
+            batchId: batchId,
+            liveBirds: birds,
+            cleanEggs: clean,
+            dirtyEggs: dirty,
+            crackedEggs: cracked,
+            floorEggs: floor,
+            eggWeightAvg: Number(row[8]) || 0,
+            birdWeightAvg: Number(row[9]) || 0,
+            mortality: Number(row[10]) || 0,
+            notes: String(row[11] || ''),
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
             metrics: {
-                totalEggs: total, 
-                cleanPercentage: total > 0 ? (clean / total) * 100 : 0, 
-                dirtyPercentage: total > 0 ? (dirty / total) * 100 : 0, 
-                crackedPercentage: total > 0 ? (cracked / total) * 100 : 0, 
-                floorPercentage: total > 0 ? (floor / total) * 100 : 0, 
-                layingRate: birds > 0 ? Number(((total / birds) * 100).toFixed(1)) : 0
+              totalEggs: total,
+              cleanPercentage: total > 0 ? (clean / total) * 100 : 0,
+              dirtyPercentage: total > 0 ? (dirty / total) * 100 : 0,
+              crackedPercentage: total > 0 ? (cracked / total) * 100 : 0,
+              floorPercentage: total > 0 ? (floor / total) * 100 : 0,
+              layingRate: birds > 0 ? Number(((total / birds) * 100).toFixed(1)) : 0
             }
           });
         }
-        if (newRecords.length > 0) { onImportRecords(newRecords); alert(`${newRecords.length} registros importados.`); }
-      } catch (err) { alert("Erro ao processar o arquivo."); }
+
+        if (newRecords.length > 0) {
+          onImportRecords(newRecords);
+          alert(`${newRecords.length} registros importados.`);
+        } else {
+          alert("Nenhum registro válido encontrado no arquivo.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao processar o arquivo. Verifique se o formato está correto.");
+      }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
-    reader.readAsText(file);
+    reader.readAsBinaryString(file);
   };
 
   return (
     <div className="space-y-6">
-      <input type="file" accept=".csv, text/csv, .txt, application/vnd.ms-excel" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+      <input type="file" accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
       <ConfirmationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={() => modalType === 'single' ? (selectedRecordId && onDeleteRecord(selectedRecordId)) : onDeleteAll()} message={modalType === 'all' ? "Deseja apagar todos os registros permanentemente?" : "Deseja apagar este registro?"} />
       
       <div className="bg-white p-4 sm:p-6 rounded-xl border border-gray-100 shadow-sm space-y-4">
@@ -243,9 +276,15 @@ export const DailyRecords: React.FC<DailyRecordsProps> = ({
           <Search size={18} className="absolute left-3 top-3.5 text-gray-300" />
         </div>
         <div className="grid grid-cols-2 sm:flex gap-2">
-          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95">Importar</button>
-          <button onClick={handleExportCSV} className="px-4 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95">Exportar</button>
-          <button onClick={() => { setModalType('all'); setIsModalOpen(true); }} className="col-span-2 sm:w-auto px-4 py-3 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all">Apagar Tudo</button>
+          <button onClick={() => fileInputRef.current?.click()} className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
+            <Upload size={14} /> Importar
+          </button>
+          <button onClick={handleExportXLSX} className="px-4 py-3 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
+            <FileSpreadsheet size={14} /> Exportar XLSX
+          </button>
+          <button onClick={() => { setModalType('all'); setIsModalOpen(true); }} className="col-span-2 sm:w-auto px-4 py-3 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all flex items-center justify-center gap-2">
+            <Trash2 size={14} /> Apagar Tudo
+          </button>
         </div>
       </div>
 

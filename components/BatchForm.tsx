@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { X, Save } from 'lucide-react';
 import { BatchRecord } from '../types';
@@ -21,14 +20,25 @@ export const BatchForm: React.FC<BatchFormProps> = ({ initialData, onSave, onCan
     weight: 0,
     uniformity: 0,
     feathering: 'Bom',
-    notes: '',
-    updatedAt: new Date().toISOString()
+    vaccineType: '',
+    vaccinationAge: 0,
+    dose: '1ª Dose',
+    isFinalized: false,
+    finalizationDate: '',
+    notes: ''
   };
 
   const [formData, setFormData] = useState<Omit<BatchRecord, 'id'>>(() => {
     if (initialData) {
       const { id, ...rest } = initialData;
-      return rest;
+      return {
+        ...rest,
+        vaccineType: rest.vaccineType || '',
+        vaccinationAge: rest.vaccinationAge || 0,
+        dose: rest.dose || '1ª Dose',
+        isFinalized: rest.isFinalized || false,
+        finalizationDate: rest.finalizationDate || ''
+      };
     }
     return defaultValues;
   });
@@ -41,6 +51,9 @@ export const BatchForm: React.FC<BatchFormProps> = ({ initialData, onSave, onCan
         ...prev,
         [name]: value === '' ? 0 : parseFloat(value)
       }));
+    } else if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({ ...prev, [name]: checked }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -163,20 +176,96 @@ export const BatchForm: React.FC<BatchFormProps> = ({ initialData, onSave, onCan
           </div>
         </div>
 
-        {/* Row 4: Empenamento */}
-        <div className="space-y-1.5">
-           <label className="block text-sm text-gray-700">Empenamento</label>
-           <select
-              name="feathering"
-              value={formData.feathering}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="Excelente">Excelente</option>
-              <option value="Bom">Bom</option>
-              <option value="Regular">Regular</option>
-              <option value="Ruim">Ruim</option>
-            </select>
+        {/* Row 4: Empenamento e Finalizar */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-1.5">
+            <label className="block text-sm text-gray-700">Empenamento</label>
+            <select
+                name="feathering"
+                value={formData.feathering}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="Excelente">Excelente</option>
+                <option value="Bom">Bom</option>
+                <option value="Regular">Regular</option>
+                <option value="Ruim">Ruim</option>
+              </select>
+          </div>
+
+          <div className="flex flex-col gap-2 pt-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isFinalized"
+                name="isFinalized"
+                checked={formData.isFinalized}
+                onChange={handleChange}
+                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="isFinalized" className="text-sm font-bold text-gray-700 cursor-pointer">
+                Finalizar Lote (Substituir lote anterior)
+              </label>
+            </div>
+            
+            {formData.isFinalized && (
+              <div className="mt-2 space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                <label className="block text-xs font-bold text-amber-700 uppercase">Data de Finalização</label>
+                <input
+                  type="date"
+                  name="finalizationDate"
+                  value={formData.finalizationDate}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-amber-200 bg-amber-50 rounded-md text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                />
+                <p className="text-[10px] text-amber-600 font-medium">A partir desta data, as aves deste lote não serão mais contabilizadas.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Row 5: Vacinação */}
+        <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-4">
+          <h3 className="text-sm font-black text-blue-800 uppercase tracking-wider flex items-center gap-2">
+            Controle de Vacinação
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-600 uppercase">Tipo de Vacina</label>
+              <input
+                type="text"
+                name="vaccineType"
+                value={formData.vaccineType}
+                onChange={handleChange}
+                placeholder="Ex: Marek, Gumboro"
+                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-600 uppercase">Idade Vacinação (Dias)</label>
+              <input
+                type="number"
+                name="vaccinationAge"
+                value={formData.vaccinationAge || ''}
+                onChange={handleChange}
+                placeholder="Ex: 1"
+                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-gray-600 uppercase">Dose</label>
+              <select
+                name="dose"
+                value={formData.dose}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="1ª Dose">1ª Dose</option>
+                <option value="2ª Dose">2ª Dose</option>
+                <option value="3ª Dose">3ª Dose</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Action Buttons */}

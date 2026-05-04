@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { 
   ClipboardCheck, 
@@ -9,8 +8,10 @@ import {
   Bird,
   ChevronDown,
   ChevronUp,
-  Edit
+  Edit,
+  FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { BatchRecord, ProductionRecord } from '../types';
 import { ConfirmationModal } from './ConfirmationModal';
 
@@ -89,25 +90,31 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
   };
 
   // --- Import/Export ---
-  const handleExportCSV = () => {
+  const handleExportXLSX = () => {
      if (records.length === 0) {
       alert("Não há dados para exportar.");
       return;
     }
-    const headers = ["Data", "Aviario", "Lote", "Idade (Sem)", "Peso (g)", "Uniformidade", "Empenamento"];
-    const csvRows = [
-      headers.join(';'),
-      ...records.map(r => [
-        r.date, r.aviaryId, r.batchId, r.ageWeeks, r.weight, r.uniformity, r.feathering
-      ].join(';'))
-    ];
-    const csvContent = "data:text/csv;charset=utf-8," + encodeURIComponent(csvRows.join('\n'));
-    const link = document.createElement("a");
-    link.setAttribute("href", csvContent);
-    link.setAttribute("download", `lotes_aviario_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    
+    const data = records.map(r => ({
+      "Data": r.date,
+      "Aviario": r.aviaryId,
+      "Lote": r.batchId,
+      "Idade (Sem)": r.ageWeeks,
+      "Peso (g)": r.weight,
+      "Uniformidade": r.uniformity,
+      "Empenamento": r.feathering,
+      "Tipo Vacina": r.vaccineType || '',
+      "Idade Vacinação": r.vaccinationAge || 0,
+      "Dose": r.dose || '',
+      "Finalizado": r.isFinalized ? 'Sim' : 'Não',
+      "Data Finalização": r.finalizationDate || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Lotes");
+    XLSX.writeFile(wb, `lotes_aviario_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,40 +123,75 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (!text) return;
       try {
-        const lines = text.split('\n');
-        const newRecords: BatchRecord[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          const separator = line.includes(';') ? ';' : ',';
-          const cols = line.split(separator).map(c => c.replace(/"/g, '').trim());
-          if (cols.length < 5) continue;
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
 
-          // Fixed missing 'updatedAt' property for BatchRecord
+        if (json.length < 2) return;
+
+        const newRecords: BatchRecord[] = [];
+        
+        const parseDateFlexible = (dateStr: any) => {
+          if (!dateStr) return null;
+          
+          if (typeof dateStr === 'number') {
+            const date = XLSX.SSF.parse_date_code(dateStr);
+            const y = date.y;
+            const m = String(date.m).padStart(2, '0');
+            const d = String(date.d).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+          }
+
+          const str = String(dateStr).trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+          if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+            const [d, m, y] = str.split('/');
+            return `${y}-${m}-${d}`;
+          }
+          return null;
+        };
+
+        for (let i = 1; i < json.length; i++) {
+          const row = json[i];
+          if (!row || row.length === 0) continue;
+
+          const date = parseDateFlexible(row[0]);
+          if (!date) continue;
+
           newRecords.push({
             id: crypto.randomUUID(),
-            date: cols[0],
-            aviaryId: cols[1],
-            batchId: cols[2],
-            ageWeeks: Number(cols[3]) || 0,
-            currentBirds: 0, // Calculated from production records now
-            weight: Number(cols[5]) || 0,
-            uniformity: Number(cols[6]) || 0,
-            feathering: (cols[7] as any) || 'Bom',
-            updatedAt: new Date().toISOString()
+            date: date,
+            aviaryId: String(row[1] || '1'),
+            batchId: String(row[2] || '-'),
+            ageWeeks: Number(row[3]) || 0,
+            currentBirds: 0, 
+            weight: Number(row[4]) || 0,
+            uniformity: Number(row[5]) || 0,
+            feathering: (row[6] as any) || 'Bom',
+            vaccineType: String(row[7] || ''),
+            vaccinationAge: Number(row[8]) || 0,
+            dose: (row[9] as any) || '1ª Dose',
+            isFinalized: row[10] === 'Sim' || row[10] === true,
+            finalizationDate: parseDateFlexible(row[11]) || ''
           });
         }
-        if (newRecords.length > 0) onImportRecords(newRecords);
-        else alert("Formato inválido.");
+        
+        if (newRecords.length > 0) {
+          onImportRecords(newRecords);
+          alert(`${newRecords.length} lotes importados.`);
+        } else {
+          alert("Nenhum lote válido encontrado.");
+        }
       } catch (err) {
-        alert("Erro ao importar CSV.");
+        console.error(err);
+        alert("Erro ao importar arquivo.");
       }
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
-    reader.readAsText(file);
+    reader.readAsBinaryString(file);
   };
 
   return (
@@ -157,7 +199,7 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
       
       <input 
         type="file" 
-        accept=".csv"
+        accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
         ref={fileInputRef}
         onChange={handleFileChange}
         className="hidden"
@@ -191,10 +233,10 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
             <Upload size={16} /> <span className="hidden sm:inline">Importar</span>
           </button>
           <button 
-            onClick={handleExportCSV}
+            onClick={handleExportXLSX}
             className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
           >
-            <Download size={16} /> <span className="hidden sm:inline">Exportar</span>
+            <FileSpreadsheet size={16} /> <span className="hidden sm:inline">Exportar XLSX</span>
           </button>
           <button 
             onClick={handleRequestDeleteAll}
@@ -254,16 +296,26 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
                           <th className="px-6 py-4">Lote</th>
                           <th className="px-6 py-4 text-center">Idade (Sem.)</th>
                           <th className="px-6 py-4 text-center">Peso (g)</th>
-                          <th className="px-6 py-4 text-center">Uniformidade</th>
-                          <th className="px-6 py-4 text-center">Empenamento</th>
+                          <th className="px-6 py-4 text-center">Vacina</th>
+                          <th className="px-6 py-4 text-center">Dose</th>
                           <th className="px-6 py-4 text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {records.length > 0 ? (
                           records.map((record) => (
-                            <tr key={record.id} className="hover:bg-gray-50 transition-colors">
-                              <td className="px-6 py-4 font-medium text-gray-900">{formatDate(record.date)}</td>
+                            <tr key={record.id} className={`hover:bg-gray-50 transition-colors ${record.isFinalized ? 'bg-amber-50/30' : ''}`}>
+                              <td className="px-6 py-4 font-medium text-gray-900">
+                                {formatDate(record.date)}
+                                {record.isFinalized && (
+                                  <div className="mt-1">
+                                    <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded">Finalizado</span>
+                                    {record.finalizationDate && (
+                                      <span className="ml-1 text-[9px] text-amber-600 font-bold italic">em {formatDate(record.finalizationDate)}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-6 py-4">
                                 <span className="px-2 py-1 bg-gray-100 rounded text-xs font-semibold text-gray-700">
                                   {record.batchId}
@@ -271,14 +323,13 @@ export const BatchCharacteristics: React.FC<BatchCharacteristicsProps> = ({
                               </td>
                               <td className="px-6 py-4 text-center text-gray-600">{record.ageWeeks}</td>
                               <td className="px-6 py-4 text-center font-medium text-blue-700">{record.weight}</td>
-                              <td className="px-6 py-4 text-center text-green-700">{record.uniformity}%</td>
                               <td className="px-6 py-4 text-center">
-                                <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                  record.feathering === 'Excelente' ? 'bg-green-100 text-green-800' :
-                                  record.feathering === 'Bom' ? 'bg-blue-100 text-blue-800' :
-                                  'bg-yellow-100 text-yellow-800'
-                                }`}>
-                                  {record.feathering}
+                                <div className="text-[11px] font-bold text-gray-700">{record.vaccineType || '-'}</div>
+                                <div className="text-[9px] text-gray-400">{record.vaccinationAge ? `${record.vaccinationAge} dias` : ''}</div>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold">
+                                  {record.dose || '-'}
                                 </span>
                               </td>
                               <td className="px-6 py-4 text-right">
